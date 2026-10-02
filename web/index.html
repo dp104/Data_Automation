@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Scraper</title>
+<!-- Phosphor icon font; icons simply disappear if the CDN is unreachable -->
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="mark"><i class="ph ph-squares-four" style="font-size:18px"></i></div>
+  <div class="brand"><b>Data Scraper</b><span>Website to spreadsheet</span></div>
+  <nav class="modes"><a href="/" class="on"><i class="ph ph-squares-four"></i><span>All projects</span></a></nav>
+  <!--WHO-->
+</div></header>
+
+<div class="wrap">
+  <aside class="rail">
+    <ol class="steps" id="steps">
+      <li data-s="1" class="active"><span class="dot">1</span><div>Sheet format<small>Standard or yours</small></div></li>
+      <li data-s="2"><span class="dot">2</span><div>Universities<small>Website links</small></div></li>
+      <li data-s="3"><span class="dot">3</span><div>Choose<small>Levels, intakes</small></div></li>
+      <li data-s="4"><span class="dot">4</span><div>Details<small>Per university</small></div></li>
+      <li data-s="5"><span class="dot">5</span><div>Download<small>Your Excel</small></div></li>
+    </ol>
+    <div class="side">
+      <h3>Recently scanned</h3>
+      <div class="recent" id="recent"><div class="empty">Loading...</div></div>
+    </div>
+  </aside>
+
+  <main class="flow">
+    <section class="pagehead">
+      <span class="ic"><i class="ph ph-graduation-cap"></i></span>
+      <div><h1>University and course data</h1>
+        <p>Courses, levels, international fees, intakes, durations and campuses from every course page of a university website, in your sheet format.</p></div>
+    </section>
+
+    <section class="panel" id="pS">
+      <h2>1. Sheet format</h2>
+      <p class="lead">Use the standard university format, or your own sheet. The Excel will have exactly these columns.</p>
+      <div class="fmtopt">
+        <label><input type="radio" name="fmt" value="standard" checked><div><b>Standard university format</b><span id="stdInfo">One sheet per intake (Sep, Jan, ...)</span></div></label>
+        <label><input type="radio" name="fmt" value="own"><div><b>My own sheet</b><span>Upload your sheet (header row + a few rows) or reuse one saved by your team.</span></div></label>
+      </div>
+      <div class="sub" id="colsTitle">Columns in this format</div>
+      <div class="cols" id="tplCols"></div>
+      <div id="ownWrap" class="hidden" style="margin-top:16px">
+        <div class="urlrow">
+          <input class="inp" id="tplName" placeholder="Name for your format, e.g. Partner sheet" maxlength="60">
+          <label class="btn ghost" style="height:44px" for="tplFile"><i class="ph ph-upload-simple"></i>Upload .xlsx</label>
+          <input type="file" id="tplFile" accept=".xlsx" class="hidden">
+        </div>
+        <div class="urlrow" style="margin-top:10px"><select class="inp" id="tplSel"></select></div>
+      </div>
+      <div id="tplMsg"></div>
+    </section>
+
+    <section class="panel locked hidden" id="pQ">
+      <h2>Questions about your sheet</h2>
+      <p class="lead" id="qLead">Upload or pick a format first.</p>
+      <div class="qs" id="qs"></div>
+      <details class="uni" id="advWrap"><summary>Check every column (advanced)</summary><div class="body"><div class="maptable" id="mapRows"></div></div></details>
+      <div style="display:flex;gap:10px;margin-top:16px;align-items:center"><button class="btn" id="tplSave"><i class="ph ph-check"></i>Confirm format</button><span class="help" id="saveHint" style="margin:0"></span></div>
+    </section>
+
+    <section class="panel locked" id="pL">
+      <h2>2. University websites</h2>
+      <p class="lead">One university website per line. The homepage or the course-search page both work, for example <code>https://www.rgu.ac.uk/</code> or <code>https://www.coventry.ac.uk/london/</code>.</p>
+      <label class="f" for="urls">Website links</label>
+      <textarea class="inp" id="urls" placeholder="https://www.university.ac.uk/&#10;https://www.university.edu.au/study/courses"></textarea>
+      <label class="check"><input type="checkbox" id="rescan"><span>Scan again for fresh data<br><span class="help">Leave unticked to reuse a saved scan when a site was scanned before (instant).</span></span></label>
+      <div style="margin-top:14px"><button class="btn" id="scanBtn"><i class="ph ph-magnifying-glass"></i>Scan websites</button></div>
+      <div class="sites" id="sites"></div>
+      <details class="log hidden" id="logWrap"><summary>Show technical log</summary><pre id="log"></pre></details>
+      <div id="status"></div>
+    </section>
+
+    <section class="panel locked" id="pC">
+      <h2>3. Choose what to include</h2>
+      <p class="lead" id="found">Scan at least one website first.</p>
+      <div class="group">
+        <div class="ghead"><h4>Education levels</h4><div class="acts"><button class="btn ghost" data-all="levels">All</button><button class="btn ghost" data-none="levels">None</button></div></div>
+        <div class="chips" id="levels"></div>
+      </div>
+      <div class="group">
+        <div class="ghead"><h4>Options</h4></div>
+        <label class="check" style="margin-top:0"><input type="checkbox" id="pt"><span>Include part-time study options</span></label>
+        <label class="check"><input type="checkbox" id="closed"><span>Include courses not open to international students, and apprenticeships <span class="help" id="closedN"></span></span></label>
+      </div>
+      <div class="group">
+        <div class="ghead"><h4>Mode of study</h4></div>
+        <div class="chips" id="modes"></div>
+      </div>
+      <div class="group">
+        <div class="ghead"><h4>Intakes</h4><div class="acts"><button class="btn ghost" data-all="intakes">All</button><button class="btn ghost" data-none="intakes">None</button></div></div>
+        <div class="chips" id="intakes"></div>
+      </div>
+      <div class="summary" id="summary"></div>
+    </section>
+
+    <section class="panel locked" id="pD">
+      <h2>4. University details</h2>
+      <p class="lead">Values your format needs that are the same on every row of a university. They are saved, so next time they are already filled in.</p>
+      <div id="intakeYearWrap" class="hidden" style="max-width:320px;margin-bottom:6px"><label class="f" for="intakeYear">Intake year (empty = next upcoming)</label><input class="inp" id="intakeYear" inputmode="numeric" placeholder="e.g. 2027"></div>
+      <div id="unis"></div>
+    </section>
+
+    <section class="panel locked" id="pX">
+      <h2>5. Download</h2>
+      <p class="lead">Each file comes with a review list of rows where the website did not give a fee, duration or intake.</p>
+      <div id="combineWrap" class="hidden" style="margin-bottom:14px">
+        <div class="seg"><label><input type="radio" name="comb" value="0" checked>One file per university</label><label><input type="radio" name="comb" value="1">All universities in one file</label></div>
+        <div id="fileNameWrap" class="hidden" style="max-width:420px;margin-top:10px"><label class="f" for="fileName">File name</label><input class="inp" id="fileName" placeholder="e.g. UAE universities"></div>
+      </div>
+      <button class="btn" id="genBtn"><i class="ph ph-file-xls"></i>Create Excel</button>
+      <div id="result"></div>
+      <div class="sub" style="margin-top:24px">Recent files</div>
+      <div class="files" id="files"><div class="empty">No files yet.</div></div>
+    </section>
+  </main>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const OFFLINE='Cannot reach the scraper. Check that Tailscale shows "Connected" on your computer and that the host computer is on.';
+const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+let TPL=null,INFO=null,FIELDDEF={},EDIT=null,QS=[],CONFIRMED=false;
+const SITES={};let order=[],timer=null;
+const UNI={university_name:["name","University name"],university_url:["url","University link"],country:["country","Country"],
+ city:["city","City"],region:["region","Region"],currency:["currency","Currency"],cost_of_living:["cost_of_living","Cost of living"],
+ deposit:["deposit","Minimum deposit"],credibility:["credibility","Credibility interview"],application_fee:["application_fee","Application fee"]};
+const ROWFIELDS=["course","course_url","level","mode","attendance","duration","fee","intake","campus","serial"];
+const STYLES={intake:[["Month","September"],["Mon","Sep"],["Month YYYY","September 2027"],["Mon YYYY","Sep 2027"],["Mon-YY","Sep-27"],["date","Date"]],
+ duration:[["months_number","Months as number (12)"],["years_number","Years as number (1, 1.5)"],["months_text","Months as text (12 Months)"],["years_text","Years as text (1 Year)"]]};
+
+async function api(p,body){const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),p.startsWith("/api/export")?600000:60000);
+ try{const r=await fetch(p,{signal:ctl.signal,...(body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{})});
+  if(r.status===403)return{error:"Access denied. Sign in to Tailscale with your work Google account."};
+  return await r.json()}catch(e){return{error:OFFLINE,offline:true}}finally{clearTimeout(t)}}
+function msg(kind,text,icon){return `<div class="msg ${kind}"><i class="${icon||(kind==="ok"?"ph-fill ph-check-circle":"ph ph-warning-circle")}"></i><div>${text}</div></div>`}
+const doneSites=()=>order.filter(d=>SITES[d].state==="done");
+
+function step(){let n=1;if(TPL&&CONFIRMED)n=2;if(n===2&&doneSites().length)n=3;
+ if(n===3&&sel("levels").length&&sel("modes").length&&sel("intakes").length)n=4;if(RESULT)n=6;
+ document.querySelectorAll("#steps li").forEach(li=>{const s=+li.dataset.s;li.classList.toggle("active",s===Math.min(n,5));li.classList.toggle("done",s<n)});
+ $("pQ").classList.toggle("locked",!TPL);$("pL").classList.toggle("locked",!(TPL&&CONFIRMED));
+ ["pC","pD","pX"].forEach(id=>$(id).classList.toggle("locked",!(TPL&&CONFIRMED&&doneSites().length)))}
+const STD="standard-university";
+const fmtMode=()=>document.querySelector('input[name="fmt"]:checked').value;
+document.querySelectorAll('input[name="fmt"]').forEach(r=>r.onchange=()=>{const own=fmtMode()==="own";$("ownWrap").classList.toggle("hidden",!own);
+ if(!own){$("pQ").classList.add("hidden");pickTemplate(STD)}else{$("pQ").classList.toggle("hidden",!$("tplSel").value);if($("tplSel").value)pickTemplate($("tplSel").value);else{TPL=null;CONFIRMED=false;$("tplCols").innerHTML="";$("colsTitle").textContent="Upload or choose your sheet";step()}}});
+let RESULT=false;
+
+/* ---------- 1. sample sheet ---------- */
+async function loadTemplates(selectId){const r=await api("/api/templates");if(r.error||!Array.isArray(r)){$("tplMsg").innerHTML=msg("bad",esc(r.error||"Could not load formats."));return}
+ const own=r.filter(t=>!t.id.startsWith("standard-"));
+ $("tplSel").innerHTML='<option value="">Choose a saved sheet...</option>'+own.map(t=>`<option value="${esc(t.id)}" ${t.id===selectId?"selected":""}>${esc(t.name)} (${t.columns} columns, ${t.per_intake?"one sheet per intake":"one sheet"})</option>`).join("");
+ const want=selectId||store.get("tpl");
+ if(want&&want!==STD&&own.some(t=>t.id===want)){document.querySelector('input[name="fmt"][value="own"]').checked=true;$("ownWrap").classList.remove("hidden");$("pQ").classList.remove("hidden");$("tplSel").value=want;await pickTemplate(want,true)}
+ else await pickTemplate(STD,true)}
+async function pickTemplate(id,quiet){if(!id){TPL=null;CONFIRMED=false;step();return}
+ const r=await api("/api/template?id="+encodeURIComponent(id));if(r.error){$("tplMsg").innerHTML=msg("bad",esc(r.error));return}
+ FIELDDEF=r.fields;INFO=r;TPL=r.template;store.set("tpl",id);if(!quiet)$("tplMsg").innerHTML="";
+ $("colsTitle").textContent=`Columns in this format (${TPL.columns.length})`;
+ if(id===STD){$("stdInfo").textContent=`${TPL.columns.length} columns, one sheet per intake (Sep, Jan, ...)`;CONFIRMED=true;EDIT=JSON.parse(JSON.stringify(TPL));QS=[];showCols(TPL);step();if(doneSites().length)setup();return}
+ $("pQ").classList.remove("hidden");showCols(TPL);openQuestions(JSON.parse(JSON.stringify(TPL)),r.questions,!!TPL.answered);if(doneSites().length)setup()}
+function showCols(t){$("tplCols").innerHTML=t.columns.map(c=>`<span class="${c.field==="blank"?"blank":""}" title="${esc((FIELDDEF[c.field]||[""])[0])}">${esc(c.header)}</span>`).join("")}
+$("tplSel").onchange=()=>{if($("tplSel").value){$("pQ").classList.remove("hidden");pickTemplate($("tplSel").value)}};
+$("tplFile").onchange=async()=>{const f=$("tplFile").files[0];if(!f)return;
+ if(!/\.xlsx$/i.test(f.name)){$("tplMsg").innerHTML=msg("warn","Please choose an Excel .xlsx file.");return}
+ $("tplMsg").innerHTML=msg("ok",'<div style="display:flex;gap:10px;align-items:center"><div class="spin"></div>Reading your sample sheet...</div>',"hidden");
+ const data=await new Promise(res=>{const rd=new FileReader();rd.onload=()=>res(String(rd.result).split(",")[1]);rd.readAsDataURL(f)});
+ const r=await api("/api/template/learn",{name:$("tplName").value.trim()||f.name.replace(/\.xlsx$/i,""),filename:f.name,data});$("tplFile").value="";
+ if(r.error){$("tplMsg").innerHTML=msg("bad",esc(r.error));return}
+ FIELDDEF=r.fields;TPL=r.template;INFO=null;CONFIRMED=false;$("tplSel").value="";$("pQ").classList.remove("hidden");$("colsTitle").textContent=`Columns in your sheet (${r.template.columns.length})`;
+ $("tplMsg").innerHTML=msg("ok",`Read <b>${r.template.columns.length} columns</b> from "${esc(f.name)}" (${r.template.per_intake?"one sheet per intake":"one sheet"}). ${r.questions.length?"Please answer the questions below.":"Everything is clear. Confirm it below."}`);
+ showCols(TPL);openQuestions(r.template,r.questions,false);$("pQ").scrollIntoView({behavior:"smooth",block:"start"})};
+
+/* ---------- 2. questions ---------- */
+function rowFieldOpts(cur){return ROWFIELDS.map(k=>`<option value="${k}" ${k===cur?"selected":""}>${esc(FIELDDEF[k][0])}</option>`).join("")}
+function openQuestions(t,qs,already){EDIT=t;QS=qs;CONFIRMED=already;
+ $("qLead").textContent=qs.length?`The tool found ${qs.length} thing${qs.length>1?"s":""} in "${t.name}" it wants to check with you.`:`Everything in "${t.name}" is clear.`;
+ $("qs").innerHTML=qs.map((q,qi)=>{const c=q.col!=null?t.columns[q.col]:null;let ctl="";
+  if(q.kind==="column")ctl=`<div class="opts"><label><input type="radio" name="${q.id}" value="fixed" ${q.default==="fixed"?"checked":""}>A value I type for each university</label>
+   <label><input type="radio" name="${q.id}" value="blank" ${q.default==="blank"?"checked":""}>Leave it blank</label>
+   <label><input type="radio" name="${q.id}" value="map">Fill from website data:</label><select class="inp" data-map="${q.id}">${rowFieldOpts("course")}</select></div>`;
+  else if(q.kind==="confirm_field")ctl=`<div class="opts"><label><input type="radio" name="${q.id}" value="yes" checked>Yes</label><label><input type="radio" name="${q.id}" value="blank">No, leave it blank</label></div>`;
+  else if(q.kind==="duration_unit")ctl=`<div class="opts"><label><input type="radio" name="${q.id}" value="years_number" checked>Years</label><label><input type="radio" name="${q.id}" value="months_number">Months</label></div>`;
+  else if(q.kind==="info_fee")ctl=`<div class="opts"><label><input type="radio" name="${q.id}" value="yes" checked>Yes</label><label><input type="radio" name="${q.id}" value="blank">No, leave this column blank</label></div>`;
+  else if(q.kind==="formula")ctl=`<div class="opts"><label><input type="radio" name="${q.id}" value="keep" checked>Keep the formula</label><label><input type="radio" name="${q.id}" value="fixed">Use a value I type for each university</label></div>`;
+  else if(q.kind==="layout")ctl=`<div class="opts"><label><input type="radio" name="${q.id}" value="single" checked>One sheet</label><label><input type="radio" name="${q.id}" value="per_intake">A separate sheet for each intake</label></div>`;
+  else if(q.kind==="labels")ctl=`<div class="lbls">${Object.entries(q.labels).map(([k,v])=>`<div><label class="${q.missing.includes(k)?"new":""}">${esc(k)}${q.missing.includes(k)?" (not in your sample)":""}</label><input class="inp" data-lbl="${q.id}" data-k="${esc(k)}" value="${esc(v)}"></div>`).join("")}</div>`;
+  return `<div class="q ${q.kind==="warning"?"warn":""}"><p>${esc(q.text)}</p>${ctl}</div>`}).join("")||`<div class="ready">${msg("ok","No questions. This format is ready to use.")}</div>`;
+ renderAdvanced();$("saveHint").textContent=already?"Already confirmed. Change anything and confirm again if needed.":"";
+ $("tplSave").innerHTML=already?'<i class="ph ph-check"></i>Confirmed':'<i class="ph ph-check"></i>Confirm format';step();if(already&&TPL&&TPL.id===EDIT.id)CONFIRMED=true;step()}
+function renderAdvanced(){const t=EDIT;const all=Object.entries(FIELDDEF);
+ $("mapRows").innerHTML=`<div class="maprow head"><span>Column</span><span>Example</span><span>Filled from</span><span>Written as</span></div>`+t.columns.map((c,i)=>`<div class="maprow"><b>${esc(c.header)}</b><span class="ex">${esc(c.example)||"(empty)"}</span>
+  <select class="inp" data-field="${i}">${all.map(([k,[l]])=>`<option value="${k}" ${k===c.field?"selected":""}>${esc(l)}</option>`).join("")}</select>
+  ${STYLES[c.field]?`<select class="inp" data-style="${i}">${STYLES[c.field].map(([k,l])=>`<option value="${k}" ${k===c.style?"selected":""}>${esc(l)}</option>`).join("")}</select>`:(c.formula?`<span class="ex">Formula ${esc(c.formula.replace("{row}","n"))}</span>`:"<span></span>")}</div>`).join("");
+ $("mapRows").querySelectorAll("[data-field]").forEach(s=>s.onchange=()=>{const c=EDIT.columns[+s.dataset.field];c.field=s.value;if(!["deposit","fixed"].includes(c.field))delete c.formula;if(STYLES[c.field]&&!c.style)c.style=STYLES[c.field][0][0];renderAdvanced()});
+ $("mapRows").querySelectorAll("[data-style]").forEach(s=>s.onchange=()=>{EDIT.columns[+s.dataset.style].style=s.value})}
+function applyAnswers(){const t=EDIT;
+ for(const q of QS){const val=(document.querySelector(`input[name="${q.id}"]:checked`)||{}).value;const c=q.col!=null?t.columns[q.col]:null;
+  if(q.kind==="column"){if(val==="map")c.field=document.querySelector(`[data-map="${q.id}"]`).value;else c.field=val||"blank";if(STYLES[c.field]&&!c.style)c.style=STYLES[c.field][0][0]}
+  else if(q.kind==="confirm_field"&&val==="blank")c.field="blank";
+  else if(q.kind==="duration_unit")c.style=val;
+  else if(q.kind==="info_fee"&&val==="blank")c.field="blank";
+  else if(q.kind==="formula"&&val==="fixed"){delete c.formula;c.field="fixed"}
+  else if(q.kind==="layout"&&val==="per_intake"){t.per_intake=true;t.sheet_style=t.sheet_style||"Mon"}
+  else if(q.kind==="labels"){c.labels={};document.querySelectorAll(`[data-lbl="${q.id}"]`).forEach(i=>{if(i.value.trim())c.labels[i.dataset.k]=i.value.trim()})}}
+ t.answered=true;return t}
+$("tplSave").onclick=async()=>{if(!EDIT)return;const t=applyAnswers();const r=await api("/api/template/save",{template:t});
+ if(r.error){$("tplMsg").innerHTML=msg("bad",esc(r.error));return}
+ await loadTemplates(r.id);CONFIRMED=true;step();$("saveHint").textContent="Format confirmed and saved for the whole team.";
+ $("pL").scrollIntoView({behavior:"smooth",block:"start"})};
+
+/* ---------- 3. links + scanning ---------- */
+$("scanBtn").onclick=async()=>{const urls=$("urls").value.split(/\s+/).map(x=>x.trim()).filter(Boolean);
+ if(!urls.length){$("status").innerHTML=msg("warn","Paste at least one university website link.");return}
+ RESULT=false;$("result").innerHTML="";$("status").innerHTML="";
+ for(const url of urls){const r=await api("/api/scan",{url,rescan:$("rescan").checked});
+  if(r.error){$("status").innerHTML=msg("bad",esc(url)+": "+esc(r.error));continue}
+  if(!SITES[r.dom])order.push(r.dom);SITES[r.dom]={url,state:"queued",log:[],t0:Date.now(),summary:null}}
+ renderSites();poll()};
+function renderSites(){$("sites").innerHTML=order.map(d=>{const s=SITES[d];let pages=0,courses=0;
+  for(const l of s.log){const m=l.match(/crawled (\d+) pages .*course pages (\d+)/)||l.match(/crawl finished: (\d+) pages.*?(\d+) course pages/);if(m){pages=+m[1];courses=+m[2]}}
+  const name=s.summary?esc(s.summary.defaults.name||d):esc(d);
+  const icon=s.state==="done"?'<i class="ph-fill ph-check-circle ok"></i>':(s.state==="error"||s.state==="empty")?'<i class="ph ph-warning-circle bad"></i>':'<div class="spin"></div>';
+  const st=s.state==="done"?`${s.summary.courses.length} courses`:s.state==="empty"?"No course pages found":s.state==="error"?"Scan stopped":s.state==="queued"?"Waiting in line":`${pages} pages, ${courses} courses so far`;
+  return `<div class="site">${icon}<div><b>${name}</b><span>${esc(s.url)}</span></div><div class="st">${st}</div></div>`}).join("");
+ const scanning=order.filter(d=>["scanning","queued"].includes(SITES[d].state));
+ $("logWrap").classList.toggle("hidden",!scanning.length);if(scanning.length)$("log").textContent=SITES[scanning[0]].log.join("\n")}
+async function poll(){clearTimeout(timer);let busy=false;
+ for(const d of order){const s=SITES[d];if(!["scanning","queued"].includes(s.state))continue;
+  const r=await api("/api/status?dom="+encodeURIComponent(d));
+  if(r.error){$("status").innerHTML=msg("bad",esc(r.error)+(r.offline?" Scans keep running on the server. Reconnecting...":""));busy=true;continue}
+  s.state=r.state==="idle"?"queued":r.state;s.log=r.log||[];if(r.state==="done")s.summary=r.summary;
+  if(["scanning","queued","idle"].includes(r.state))busy=true}
+ renderSites();if(doneSites().length)setup();if(busy)timer=setTimeout(poll,3000);else loadRecent()}
+
+/* ---------- 4. choices (all scanned universities together) ---------- */
+function chips(el,items,counts,checked){$(el).innerHTML=items.length?items.map(x=>`<label class="chip ${checked(x)?"on":""}"><input type="checkbox" value="${esc(x)}" ${checked(x)?"checked":""}>${esc(x)}<span class="n">${counts[x]||0}</span></label>`).join(""):'<div class="empty">None found.</div>';
+ $(el).querySelectorAll("input").forEach(i=>i.onchange=()=>{i.parentElement.classList.toggle("on",i.checked);refresh()})}
+const sel=el=>[...$(el).querySelectorAll("input:checked")].map(i=>i.value);
+document.querySelectorAll("[data-all],[data-none]").forEach(b=>b.onclick=()=>{const el=b.dataset.all||b.dataset.none,on=!!b.dataset.all;
+ $(el).querySelectorAll("input").forEach(i=>{i.checked=on;i.parentElement.classList.toggle("on",on)});refresh()});
+const allCourses=()=>doneSites().flatMap(d=>SITES[d].summary.courses);
+const base=()=>allCourses().filter(c=>$("closed").checked||!c.closed);
+const opts=c=>c.options.filter(o=>$("pt").checked||!o.pt);
+let builtFor="";
+function setup(){if(!TPL||!doneSites().length){step();return}
+ const key=doneSites().join(",")+"|"+TPL.id;const first=builtFor!==key;
+ const cs=allCourses(),n=cs.filter(c=>c.closed).length;$("closedN").textContent=n?`(${n} courses)`:"";
+ $("found").textContent=`${cs.length} courses found on ${doneSites().length} universit${doneSites().length>1?"ies":"y"}. Counts show how many courses match each choice.`;
+ const keepL=first?null:sel("levels");const lv={};base().forEach(c=>lv[c.level]=(lv[c.level]||0)+1);
+ const LV=SITES[doneSites()[0]].summary.levels;const levels=[...LV.filter(l=>lv[l]),...Object.keys(lv).filter(l=>!LV.includes(l))];
+ chips("levels",levels,lv,l=>keepL?keepL.includes(l):["Undergraduate","Postgraduate","DBA"].includes(l));
+ if(first)buildDetails();builtFor=key;refresh(first)}
+$("pt").onchange=$("closed").onchange=()=>refresh();
+function refresh(first){if(!TPL||!doneSites().length)return;const L=sel("levels"),chosen=base().filter(c=>L.includes(c.level));
+ const md={};chosen.forEach(c=>new Set(opts(c).map(o=>o.mode)).forEach(m=>md[m]=(md[m]||0)+1));
+ const prevM=first?null:sel("modes"),modes=Object.keys(md).sort((a,b)=>md[b]-md[a]);
+ chips("modes",modes,md,m=>prevM?prevM.includes(m)||!$("modes").querySelector(`[value="${m}"]`):m==="On campus"||modes.length===1);
+ const M=sel("modes"),it={};chosen.forEach(c=>{const s=new Set();opts(c).filter(o=>M.includes(o.mode)).forEach(o=>(o.months.length?o.months:["Unknown"]).forEach(x=>s.add(x)));s.forEach(x=>it[x]=(it[x]||0)+1)});
+ const MONTHS=SITES[doneSites()[0]].summary.months;const prevI=first?null:sel("intakes"),ints=[...MONTHS.filter(m=>it[m]),...(it.Unknown?["Unknown"]:[])];
+ chips("intakes",ints,it,m=>prevI?prevI.includes(m):m!=="Unknown");
+ document.querySelectorAll("[data-schbox]").forEach(box=>{const d=box.dataset.schbox,keep={};box.querySelectorAll("input").forEach(i=>keep[i.dataset.l]=i.value);
+  const sch=SITES[d].summary.defaults.scholarship||{};box.innerHTML=L.map(l=>`<div><label class="f">${esc(l)} scholarship</label><input class="inp" type="number" min="0" step="any" data-l="${esc(l)}" value="${esc(keep[l]??sch[l]??0)}"></div>`).join("")||'<div class="empty">Select a level above.</div>'});
+ const I=sel("intakes"),ok=L.length&&M.length&&I.length;const perIntake=TPL.per_intake;
+ $("summary").innerHTML=ok?`Your format <b>${esc(TPL.name)}</b> (${TPL.columns.length} columns): ${perIntake?`<b>${I.length} sheet${I.length>1?"s":""}</b>, one per intake`:"<b>one sheet</b>"}. Intakes: ${I.map(x=>`${esc(x)} (${it[x]||0} course${it[x]===1?"":"s"})`).join(", ")}.`:"Pick at least one level, one mode and one intake.";
+ $("combineWrap").classList.toggle("hidden",doneSites().length<2);step()}
+
+/* ---------- 5. details per university ---------- */
+function buildDetails(){const need=INFO?INFO.uni_fields:[];const fixed=TPL.columns.filter(c=>c.field==="fixed"&&!c.formula);
+ const uses=f=>TPL.columns.some(c=>c.field===f);
+ $("intakeYearWrap").classList.toggle("hidden",!(INFO&&INFO.intake_year));
+ $("unis").innerHTML=doneSites().map((d,i)=>{const s=SITES[d].summary,df=s.defaults,saved=df.fixed||{};
+  const fields=[...(uses("campus")?[["campus",["campus","Campus (when a course page names none)"]]]:[]),...need.filter(f=>UNI[f]).map(f=>[f,UNI[f]])];
+  return `<details class="uni" ${i===0?"open":""} data-dom="${esc(d)}"><summary>${esc(df.name||d)}</summary><div class="body">
+   ${fields.length?`<div class="grid">${fields.map(([f,[k,l]])=>`<div><label class="f">${esc(l)}</label><input class="inp" data-k="${k}" value="${esc(df[k]??"")}"></div>`).join("")}</div>`:'<p class="help">This format needs no extra values for this university.</p>'}
+   ${fixed.length?`<div class="sub">Your own columns <span>(same on every row; empty = blank)</span></div><div class="grid">${fixed.map(c=>`<div><label class="f">${esc(c.header)}</label><input class="inp" data-fixed="${esc(c.header)}" value="${esc(saved[c.header]??"")}" placeholder="${c.hint?"sample had: "+esc(c.hint):"empty = blank"}"></div>`).join("")}</div>`:""}
+   ${need.includes("scholarship")?`<div class="sub">Scholarship amount per level <span>(money, e.g. 2000)</span></div><div class="grid" data-schbox="${esc(d)}"></div>`:""}
+  </div></details>`}).join("")}
+
+/* ---------- 6. download ---------- */
+document.querySelectorAll('input[name="comb"]').forEach(r=>r.onchange=()=>$("fileNameWrap").classList.toggle("hidden",r.value!=="1"||!r.checked));
+$("genBtn").onclick=async()=>{const levels=sel("levels"),modes=sel("modes");let intakes=sel("intakes");
+ if(!levels.length||!modes.length||!intakes.length){$("result").innerHTML=msg("warn","Pick at least one level, mode and intake in step 4.");return}
+ const cnt={};$("intakes").querySelectorAll(".chip").forEach(c=>cnt[c.querySelector("input").value]=+c.querySelector(".n").textContent);
+ intakes.sort((a,b)=>(a==="Unknown")-(b==="Unknown")||cnt[b]-cnt[a]);
+ const sites=[...document.querySelectorAll("#unis [data-dom]")].map(box=>{const d=box.dataset.dom,uni=Object.assign({},SITES[d].summary.defaults);
+  box.querySelectorAll("input[data-k]").forEach(i=>uni[i.dataset.k]=i.value.trim());uni.intake_year=$("intakeYear").value.trim();
+  uni.scholarship={};box.querySelectorAll("[data-schbox] input").forEach(i=>uni.scholarship[i.dataset.l]=i.value);
+  const fixed={};box.querySelectorAll("input[data-fixed]").forEach(i=>fixed[i.dataset.fixed]=i.value.trim());return{dom:d,uni,fixed}});
+ const combined=(document.querySelector('input[name="comb"]:checked')||{}).value==="1"&&sites.length>1;
+ $("genBtn").disabled=true;$("result").innerHTML=msg("ok",'<div style="display:flex;gap:10px;align-items:center"><div class="spin"></div>Creating your Excel...</div>',"hidden");
+ const r=await api("/api/export_many",{template:TPL.id,sites,levels,modes,intakes,incl_pt:$("pt").checked,incl_closed:$("closed").checked,combined,file_name:$("fileName").value.trim()});
+ $("genBtn").disabled=false;if(r.error){$("result").innerHTML=msg("bad",esc(r.error));return}
+ RESULT=true;step();
+ $("result").innerHTML=r.files.map(f=>f.error?msg("warn",`${esc(f.name)}: ${esc(f.error)}`):`<div class="filecard"><i class="ph ph-file-xls ico"></i><div class="grow"><b>${esc(f.xlsx)}</b>
+  <span>${f.review?`${f.review} rows to check by hand (see the review list).`:"No rows need a manual check."}</span>
+  <div class="sheets">${f.sheets.map(([m,n])=>`<span>${esc(m)}: ${n} row${n===1?"":"s"}</span>`).join("")}</div></div>
+  <div class="dl"><a class="btn" href="/api/download?f=${encodeURIComponent(f.xlsx)}"><i class="ph ph-download-simple"></i>Excel</a>
+  ${f.csv?`<a class="btn ghost" style="height:44px" href="/api/download?f=${encodeURIComponent(f.csv)}">Review list</a>`:""}</div></div>`).join("");
+ loadFiles()};
+
+/* ---------- sidebar ---------- */
+async function loadRecent(){const r=await api("/api/recent");if(r.error||!Array.isArray(r)){$("recent").innerHTML='<div class="empty">Not available.</div>';return}
+ $("recent").innerHTML=r.length?r.map(u=>`<button data-url="${esc(u.url)}" title="Add to the links in step 3"><b>${esc(u.name)}</b><span>${u.courses} course${u.courses===1?"":"s"} · ${esc(u.scanned_at.slice(0,10))}</span></button>`).join(""):'<div class="empty">No scans yet.</div>';
+ $("recent").querySelectorAll("button").forEach(b=>b.onclick=()=>{const cur=$("urls").value.split(/\s+/).filter(Boolean);if(!cur.includes(b.dataset.url))cur.push(b.dataset.url);
+  $("urls").value=cur.join("\n");if(!$("pL").classList.contains("locked"))$("pL").scrollIntoView({behavior:"smooth",block:"start"})})}
+async function loadFiles(){const r=await api("/api/files");if(r.error||!Array.isArray(r))return;
+ $("files").innerHTML=r.length?r.map(f=>`<a href="/api/download?f=${encodeURIComponent(f.xlsx)}"><i class="ph ph-file-xls"></i>${esc(f.xlsx)}<span class="t">${esc(f.time)}</span></a>`).join(""):'<div class="empty">No files yet.</div>'}
+loadTemplates();loadRecent();loadFiles();step();
+
+</script>
+</body>
+</html>

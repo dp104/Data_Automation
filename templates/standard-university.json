@@ -1,0 +1,178 @@
+{
+ "id": "standard-university",
+ "name": "Standard university format (one sheet per intake)",
+ "sample": "standard-university.xlsx",
+ "header_row": 1,
+ "sheet_title": "Sep",
+ "per_intake": true,
+ "sheet_style": "Mon",
+ "columns": [
+  {
+   "col": 1,
+   "letter": "A",
+   "header": "Sl.No",
+   "field": "serial",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 2,
+   "letter": "B",
+   "header": "Country ",
+   "field": "country",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 3,
+   "letter": "C",
+   "header": "University Link",
+   "field": "university_url",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 4,
+   "letter": "D",
+   "header": "University",
+   "field": "university_name",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 5,
+   "letter": "E",
+   "header": "Campus",
+   "field": "campus",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 6,
+   "letter": "F",
+   "header": "City",
+   "field": "city",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 7,
+   "letter": "G",
+   "header": "Region",
+   "field": "region",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 8,
+   "letter": "H",
+   "header": "Level",
+   "field": "level",
+   "example": "",
+   "fixed": "",
+   "labels": {
+    "Postgraduate": "Postgraduate",
+    "Undergraduate": "Undergraduate",
+    "DBA": "DBA"
+   }
+  },
+  {
+   "col": 9,
+   "letter": "I",
+   "header": "Mode Of Education",
+   "field": "mode",
+   "example": "",
+   "fixed": "",
+   "labels": {
+    "On campus": "On campus"
+   }
+  },
+  {
+   "col": 10,
+   "letter": "J",
+   "header": "Course",
+   "field": "course",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 11,
+   "letter": "K",
+   "header": "Course Link",
+   "field": "course_url",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 12,
+   "letter": "L",
+   "header": "Duration",
+   "field": "duration",
+   "example": "",
+   "fixed": "",
+   "style": "months_number"
+  },
+  {
+   "col": 13,
+   "letter": "M",
+   "header": "First Year fee",
+   "field": "fee",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 14,
+   "letter": "N",
+   "header": "Scholarship",
+   "field": "scholarship",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 15,
+   "letter": "O",
+   "header": "Intake",
+   "field": "intake",
+   "example": "",
+   "fixed": "",
+   "style": "Month"
+  },
+  {
+   "col": 16,
+   "letter": "P",
+   "header": "Cost of living",
+   "field": "cost_of_living",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 17,
+   "letter": "Q",
+   "header": "Minimum Deposit",
+   "field": "deposit",
+   "example": "",
+   "fixed": "",
+   "formula": "=M{row}*0.34"
+  },
+  {
+   "col": 18,
+   "letter": "R",
+   "header": "Credibilty interview",
+   "field": "credibility",
+   "example": "",
+   "fixed": ""
+  },
+  {
+   "col": 19,
+   "letter": "S",
+   "header": "Application Fee",
+   "field": "application_fee",
+   "example": "",
+   "fixed": ""
+  }
+ ],
+ "created": "2026-10-02",
+ "answered": true,
+ "kind": "standard",
+ "rows": []
+}

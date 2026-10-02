@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Scraper - Projects</title>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link rel="stylesheet" href="/app.css">
+<style>
+.home{max-width:1180px;margin:0 auto;padding:30px 20px 80px}
+.hd{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:28px;align-items:end;margin-bottom:26px}
+@media (max-width:900px){.hd{grid-template-columns:1fr}}
+.hd h1{font-size:32px;line-height:1.15;margin:0 0 10px;letter-spacing:-.02em} .hd p{color:var(--ink-2);margin:0;max-width:58ch}
+.promise{display:grid;gap:10px;font-size:13.5px;color:var(--ink-2)} .promise div{display:flex;gap:9px;align-items:flex-start} .promise i{color:var(--accent);margin-top:2px}
+.types{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:980px){.types{grid-template-columns:repeat(2,minmax(0,1fr))}} @media (max-width:600px){.types{grid-template-columns:1fr}}
+.tcard{display:flex;flex-direction:column;gap:10px;padding:18px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow);text-decoration:none;color:var(--ink);transition:border-color .15s,transform .15s}
+.tcard:hover{border-color:var(--accent-line);transform:translateY(-1px)} .tcard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tcard .ic{width:40px;height:40px;border-radius:11px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:21px}
+.tcard b{font-size:15.5px} .tcard p{margin:0;font-size:13.5px;color:var(--ink-2);flex:1}
+.tcard .meta{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--ink-3)}
+.tcard .go{color:var(--accent);font-weight:600;display:flex;gap:5px;align-items:center;text-decoration:none}
+.tcard.contact{border-style:dashed;box-shadow:none;background:var(--sunken)} .tcard.contact:hover{transform:none}
+
+.sec2{margin:34px 0 12px;display:flex;align-items:baseline;gap:12px} .sec2 h2{font-size:18px;margin:0}
+.plist2{display:grid;gap:8px}
+.prow{display:grid;grid-template-columns:40px minmax(0,1.6fr) minmax(0,1fr) minmax(0,.8fr) auto;gap:14px;align-items:center;padding:12px 16px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface);text-decoration:none;color:var(--ink)}
+.prow:hover{border-color:var(--accent-line)} .prow .ic{width:34px;height:34px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center}
+.prow b{display:block;font-size:14px} .prow span{font-size:12.5px;color:var(--ink-3)} .prow .num{font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-2)}
+@media (max-width:760px){.prow{grid-template-columns:34px 1fr auto}.prow .hide{display:none}}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="mark"><i class="ph ph-squares-four" style="font-size:18px"></i></div>
+  <div class="brand"><b>Data Scraper</b><span>Website to spreadsheet</span></div>
+  <nav class="modes"><a href="/" class="on"><i class="ph ph-squares-four"></i><span>All projects</span></a></nav>
+  <!--WHO-->
+</div></header>
+<main class="home">
+  <section class="hd">
+    <div>
+      <h1>Collect data from websites into your spreadsheet</h1>
+      <p>Pick what you want to collect. Each project type has its own standard sheet format, or use your own. Add the websites, collect, and download.</p>
+    </div>
+    <div class="promise">
+      <div><i class="ph-fill ph-shield-check"></i><span>Real values read from the pages. Nothing is made up; missing values stay blank.</span></div>
+      <div><i class="ph ph-robot"></i><span>Follows each site's robots rules and pace. Use sites whose terms allow collecting.</span></div>
+      <div><i class="ph ph-chart-line-up"></i><span>Price projects remember every check and show what changed.</span></div>
+    </div>
+  </section>
+
+  <div class="types" id="types"><div class="empty">Loading...</div></div>
+
+  <div class="sec2"><h2>Your projects</h2><span class="help" id="pcount"></span></div>
+  <div class="plist2" id="projects"><div class="empty">Loading...</div></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let TYPES={};
+async function api(p){try{const r=await fetch(p);return await r.json()}catch(e){return{error:"offline"}}}
+async function load(){const t=await api("/api/types");if(!Array.isArray(t)){$("types").innerHTML='<div class="empty">Could not load.</div>';return}
+ t.forEach(x=>TYPES[x.id]=x);
+ $("types").innerHTML=t.map(x=>`<a class="tcard" href="${x.page||"/project?type="+x.id}"><span class="ic"><i class="ph ${esc(x.icon)}"></i></span><b>${esc(x.name)}</b><p>${esc(x.blurb)}</p>
+  <div class="meta"><span>${x.page?"Standard university format or your own":`${x.columns.length} standard columns`}${x.tracking?" · price tracking":""}</span><span class="go">Start <i class="ph ph-arrow-right"></i></span></div></a>`).join("");
+ const o=await api("/api/owner");const subject=encodeURIComponent("New data collection project request");
+ const body=encodeURIComponent("Hi,\n\nI need to collect this data:\n\nFrom these websites:\n\nColumns I need (or attach a sample sheet):\n\nThanks");
+ $("types").insertAdjacentHTML("beforeend",`<div class="tcard contact"><span class="ic"><i class="ph ph-envelope-simple"></i></span><b>Need a different kind of data?</b>
+  <p>Tell the owner what you want to collect and from which websites. New project types are set up on request.</p>
+  <div class="meta">${o&&o.email?`<span>${esc(o.email)}</span><a class="go" href="mailto:${esc(o.email)}?subject=${subject}&body=${body}">Email the owner <i class="ph ph-arrow-right"></i></a>`:"<span>Contact the owner of this tool</span>"}</div></div>`);
+ const p=await api("/api/projects");if(!Array.isArray(p))return;
+ $("pcount").textContent=p.length?`${p.length} project${p.length>1?"s":""}`:"";
+ $("projects").innerHTML=p.length?p.map(x=>{const ty=TYPES[x.type]||{};const host=(x.sites[0]||"").replace(/^https?:\/\/(www\.)?/,"").split("/")[0];
+  return `<a class="prow" href="/project?type=${esc(x.type)}&id=${esc(x.id)}"><span class="ic"><i class="ph ${esc(ty.icon||"ph-folder")}"></i></span>
+   <div><b>${esc(x.name)}</b><span>${esc(ty.name||x.type)} · ${esc(host)}${x.sites.length>1?` +${x.sites.length-1} more`:""}</span></div>
+   <div class="num hide">${x.last_run?`Last collected ${esc(x.last_run.slice(0,16).replace("T"," "))}`:"Not collected yet"}</div>
+   <div class="num hide">${x.rows} rows</div>
+   <div>${x.changes?`<span class="pill no"><i class="ph ph-arrows-down-up"></i>${x.changes} price change${x.changes>1?"s":""}</span>`:`<span class="pill mute">Open</span>`}</div></a>`}).join(""):
+  '<div class="empty">No projects yet. Pick a type above to start.</div>'}
+load();
+</script>
+</body>
+</html>

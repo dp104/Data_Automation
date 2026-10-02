@@ -1,0 +1,18 @@
+# environment
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# team data and run results (kept on the host, not in Git)
+cache/
+outputs/
+logs/
+configs/
+profiles/
+projects/
+
+# uploaded sample sheets are team data; only the built-in standard formats are part of the code
+templates/*
+!templates/standard-university.json
+!templates/standard-university.xlsx

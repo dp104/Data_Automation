@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Scraper - Any website</title>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="mark"><i class="ph ph-squares-four" style="font-size:18px"></i></div>
+  <div class="brand"><b>Data Scraper</b><span>Website to spreadsheet</span></div>
+  <nav class="modes"><a href="/" class="on"><i class="ph ph-squares-four"></i><span>All projects</span></a></nav>
+  <!--WHO-->
+</div></header>
+
+<div class="wrap">
+  <aside class="rail">
+    <ol class="steps" id="steps">
+      <li data-s="1" class="active"><span class="dot">1</span><div>Sample sheet<small>Your format</small></div></li>
+      <li data-s="2"><span class="dot">2</span><div>Example pages<small>Teach the tool</small></div></li>
+      <li data-s="3"><span class="dot">3</span><div>Check fields<small>Where each value is</small></div></li>
+      <li data-s="4"><span class="dot">4</span><div>Collect<small>Read the site</small></div></li>
+      <li data-s="5"><span class="dot">5</span><div>Download<small>Your Excel</small></div></li>
+    </ol>
+    <div class="side">
+      <h3>Saved site setups</h3>
+      <div class="recent" id="profiles"><div class="empty">Loading...</div></div>
+    </div>
+  </aside>
+
+  <main class="flow">
+    <section class="hero">
+      <div>
+        <h1>Custom scraping: any website, your own columns</h1>
+        <p>Products, jobs, listings, directories, courses: show the tool your sample sheet and one or two pages where those values appear. It learns where each value sits, then reads every similar page on the site.</p>
+        <div class="never"><i class="ph-fill ph-shield-check"></i><div>No AI and no paid APIs: values are read straight from the pages. A column the site does not show stays blank, or gets a value you type. Pages with missing values are listed in a review file.</div></div>
+        <div class="never"><i class="ph ph-lightbulb"></i><div>Works best on sites where every item has its own page with the same layout, such as product, job, property or profile pages.</div></div>
+      </div>
+      <ol class="how">
+        <li><span class="ic"><i class="ph ph-file-xls"></i></span><div><b>1. Upload a sample sheet</b><span>Your columns, in your order, with a few real example rows.</span></div></li>
+        <li><span class="ic"><i class="ph ph-link-simple"></i></span><div><b>2. Give example pages</b><span>The page each example row came from. One works; two make it more reliable.</span></div></li>
+        <li><span class="ic"><i class="ph ph-crosshair"></i></span><div><b>3. Check the fields</b><span>See where each value was found, and pick another spot on the page if needed.</span></div></li>
+        <li><span class="ic"><i class="ph ph-stack"></i></span><div><b>4. Collect</b><span>The tool reads every page like your examples and shows rows as they come in.</span></div></li>
+        <li><span class="ic"><i class="ph ph-download-simple"></i></span><div><b>5. Download</b><span>Exactly your columns and styling.</span></div></li>
+      </ol>
+    </section>
+
+    <section class="panel" id="pS">
+      <h2>1. Your sample sheet</h2>
+      <p class="lead">Upload an Excel file with your header row and a few rows copied from the website. Or reuse a saved format.</p>
+      <div class="urlrow">
+        <input class="inp" id="tplName" placeholder="Name for this format, e.g. Product list" maxlength="60">
+        <label class="btn" style="height:44px" for="tplFile"><i class="ph ph-upload-simple"></i>Upload sample .xlsx</label>
+        <input type="file" id="tplFile" accept=".xlsx" class="hidden">
+      </div>
+      <div id="tplMsg"></div>
+      <div class="sub" style="margin-top:22px">Or reuse a saved format</div>
+      <select class="inp" id="tplSel"></select>
+      <div id="sampleTable"></div>
+    </section>
+
+    <section class="panel locked" id="pE">
+      <h2>2. Example pages</h2>
+      <p class="lead">For one or two of your sample rows, paste the web page that row's data came from. Links already in your sheet are filled in. Use rows whose values still match the website today.</p>
+      <div id="examples"></div>
+      <div style="margin-top:16px"><button class="btn" id="learnBtn"><i class="ph ph-magic-wand"></i>Learn from these pages</button></div>
+      <div id="learnMsg"></div>
+    </section>
+
+    <section class="panel locked" id="pF">
+      <h2>3. Check where each value comes from</h2>
+      <p class="lead" id="fLead">Learn from example pages first.</p>
+      <div class="maptable" id="fields"></div>
+      <div class="sub" style="margin-top:22px">Which pages to collect</div>
+      <p class="help" style="margin-top:0">"..." means any text in that part of the address. A broader choice collects more sections of the site (for example every faculty, not only the one in your examples).</p>
+      <div class="qs" id="patChoices"></div>
+      <details class="uni" style="margin-top:10px"><summary>Advanced: edit the address pattern</summary><div class="body">
+        <input class="inp" id="pattern" spellcheck="false" style="font-family:var(--mono);font-size:13px"></div></details>
+      <div id="patMsg"></div>
+      <div style="margin-top:16px"><button class="btn" id="saveBtn"><i class="ph ph-floppy-disk"></i>Save site setup</button></div>
+      <div id="saveMsg"></div>
+    </section>
+
+    <section class="panel locked" id="pC">
+      <h2>4. Collect from the website</h2>
+      <p class="lead">Start from the homepage or a listing page (for example a category or search results page).</p>
+      <div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+        <div><label class="f" for="startUrl">Start link</label><input class="inp" id="startUrl" type="url"></div>
+        <div><label class="f" for="maxPages">Pages to check (at most)</label>
+          <select class="inp" id="maxPages"><option value="200">200 (quick test)</option><option value="1000" selected>1,000</option><option value="3000">3,000</option><option value="8000">8,000 (large site)</option></select></div>
+      </div>
+      <label class="check"><input type="checkbox" id="rescan"><span>Collect again for fresh data<br><span class="help">Leave unticked to reuse the last collection for this site setup.</span></span></label>
+      <div style="margin-top:14px"><button class="btn" id="scanBtn"><i class="ph ph-play"></i>Start collecting</button></div>
+      <div id="prog" class="progress hidden">
+        <div class="row"><div class="spin" id="progSpin"></div><span id="progTitle">Collecting</span></div>
+        <div class="bar" id="progBar"><i></i></div>
+        <div class="stats">
+          <div class="stat"><b id="stPages">0</b><span>pages checked</span></div>
+          <div class="stat"><b id="stRows">0</b><span>rows collected</span></div>
+          <div class="stat"><b id="stTime">0:00</b><span>elapsed</span></div>
+        </div>
+        <details class="log"><summary>Show technical log</summary><pre id="log"></pre></details>
+      </div>
+      <div id="scanMsg"></div>
+      <div id="preview"></div>
+    </section>
+
+    <section class="panel locked" id="pX">
+      <h2>5. Download</h2>
+      <p class="lead">Exactly your columns. A review list shows pages where a value was missing.</p>
+      <div id="fixedWrap" class="hidden"><div class="sub" style="margin-top:0">Your own columns <span>(same value on every row; empty = blank)</span></div><div class="grid" id="fixed"></div></div>
+      <div style="max-width:420px;margin:14px 0"><label class="f" for="fileName">File name</label><input class="inp" id="fileName"></div>
+      <button class="btn" id="genBtn"><i class="ph ph-file-xls"></i>Create Excel</button>
+      <div id="result"></div>
+      <div class="sub" style="margin-top:24px">Recent files</div>
+      <div class="files" id="files"><div class="empty">No files yet.</div></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const OFFLINE="Cannot reach the scraper. Check that it is still running on the host computer.";
+const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+let TPL=null,LEARN=null,CHOICE=[],PROFILE=null,timer=null,t0=0,ROWS=[];
+async function api(p,body){const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),p.includes("learn")||p.includes("export")?300000:60000);
+ try{const r=await fetch(p,{signal:ctl.signal,...(body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{})});
+  if(r.status===403)return{error:"Access denied."};return await r.json()}catch(e){return{error:OFFLINE,offline:true}}finally{clearTimeout(t)}}
+function msg(kind,text,icon){return `<div class="msg ${kind}"><i class="${icon||(kind==="ok"?"ph-fill ph-check-circle":"ph ph-warning-circle")}"></i><div>${text}</div></div>`}
+const busy=t=>msg("ok",`<div style="display:flex;gap:10px;align-items:center"><div class="spin"></div>${t}</div>`,"hidden");
+function step(){let n=1;if(TPL)n=2;if(LEARN||PROFILE)n=3;if(PROFILE)n=4;if(ROWS.length)n=5;
+ document.querySelectorAll("#steps li").forEach(li=>{const s=+li.dataset.s;li.classList.toggle("active",s===n);li.classList.toggle("done",s<n)});
+ $("pE").classList.toggle("locked",!TPL);$("pF").classList.toggle("locked",!LEARN);$("pC").classList.toggle("locked",!PROFILE);$("pX").classList.toggle("locked",!ROWS.length)}
+// special: {header: "serial" | "typed" | "formula"} - shown the way the Excel will fill them
+function table(cols,rows,emptyText,special){special=special||{};if(!rows.length)return `<div class="empty" style="margin-top:10px">${emptyText}</div>`;
+ const cell=(c,v,i)=>{if(special[c]==="serial")return `<td class="auto">${i+1}</td>`;if(special[c]==="formula")return '<td class="auto">formula</td>';
+  if(v===null||v===undefined||v===""){if(special[c]==="typed"){const tv=typedValue(c);return tv?`<td class="auto" title="Your value, same on every row">${esc(tv)}</td>`:'<td class="miss">blank</td>'}return '<td class="miss">blank</td>'}
+  return `<td title="${esc(v)}">${esc(v)}</td>`};
+ return `<div class="tablewrap"><table class="data"><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${rows.map((r,i)=>`<tr>${cols.map(c=>cell(c,r[c],i)).join("")}</tr>`).join("")}</tbody></table></div>`}
+function typedValue(h){const i=document.querySelector(`[data-fixed="${CSS.escape(h)}"]`);return i?i.value.trim():""}
+function specialCols(){const sp={};TPL.columns.forEach(c=>{if(c.field==="serial")sp[c.header]="serial";if(c.formula)sp[c.header]="formula"});(PROFILE&&PROFILE.typed||[]).forEach(h=>{if(!sp[h])sp[h]="typed"});return sp}
+
+/* ---------- 1. sample sheet ---------- */
+async function loadTemplates(selectId){const r=await api("/api/templates");if(!Array.isArray(r))return;
+ $("tplSel").innerHTML='<option value="">Choose a saved format...</option>'+r.map(t=>`<option value="${esc(t.id)}">${esc(t.name)} (${t.columns} columns)</option>`).join("");
+ const want=selectId||store.get("anyTpl");if(want&&r.some(t=>t.id===want)){$("tplSel").value=want;await pickTemplate(want)}}
+async function pickTemplate(id){LEARN=null;PROFILE=null;ROWS=[];if(!id){TPL=null;step();return}
+ const r=await api("/api/template?id="+encodeURIComponent(id));if(r.error){$("tplMsg").innerHTML=msg("bad",esc(r.error));return}
+ TPL=r.template;store.set("anyTpl",id);showSample();buildExamples();step()}
+const UNI_HINTS=[/course|programme|program/,/level|degree/,/intake|start/,/duration|length/,/fee|tuition/,/campus/,/scholarship/,/universit|institution/,/deposit|cost of living|credib/];
+function uniBanner(){const hs=TPL.columns.map(c=>c.header.toLowerCase()).join(" | ");const n=UNI_HINTS.filter(r=>r.test(hs)).length;
+ return n>=5?msg("warn",`This looks like a <b>university course sheet</b>. The <b>University courses</b> mode is built for it: it reads fees, intakes, durations and campuses from every course page, even when your sample is out of date. <a href="/university" onclick="localStorage.setItem('tpl','${esc(TPL.id)}')">Use University courses mode</a>`,"ph ph-graduation-cap"):""}
+function showSample(){const cols=TPL.columns.map(c=>c.header);const rows=(TPL.rows||[]).slice(0,5).map(r=>Object.fromEntries(cols.map((c,i)=>[c,r[i]])));
+ $("sampleTable").innerHTML=uniBanner()+`<div class="sub">Your sample (${cols.length} columns)</div>`+table(cols,rows,"This format has no example rows. Upload a sample with rows so the tool can find them on the pages.")}
+$("tplSel").onchange=()=>pickTemplate($("tplSel").value);
+$("tplFile").onchange=async()=>{const f=$("tplFile").files[0];if(!f)return;
+ if(!/\.xlsx$/i.test(f.name)){$("tplMsg").innerHTML=msg("warn","Please choose an Excel .xlsx file.");return}
+ $("tplMsg").innerHTML=busy("Reading your sample sheet...");
+ const data=await new Promise(res=>{const rd=new FileReader();rd.onload=()=>res(String(rd.result).split(",")[1]);rd.readAsDataURL(f)});
+ const r=await api("/api/template/learn",{name:$("tplName").value.trim()||f.name.replace(/\.xlsx$/i,""),filename:f.name,data});$("tplFile").value="";
+ if(r.error){$("tplMsg").innerHTML=msg("bad",esc(r.error));return}
+ const t=r.template;t.answered=true;t.kind="any";const s=await api("/api/template/save",{template:t});
+ if(s.error){$("tplMsg").innerHTML=msg("bad",esc(s.error));return}
+ $("tplMsg").innerHTML=msg("ok",`Read <b>${t.columns.length} columns</b> and ${(t.rows||[]).length} example rows from "${esc(f.name)}".`);
+ await loadTemplates(s.id)};
+
+/* ---------- 2. example pages ---------- */
+// the item's own page: a link column whose value changes from row to row (not the site's homepage)
+function itemLinkCol(){const rows=TPL.rows||[];let best=-1,bestScore=-1;
+ TPL.columns.forEach((c,i)=>{const vals=rows.map(r=>r[i]||"").filter(v=>/^https?:\/\//.test(v));if(!vals.length)return;
+  const distinct=new Set(vals).size,deep=vals.filter(v=>{try{return new URL(v).pathname.replace(/\/+$/,"")!==""}catch(e){return false}}).length;
+  const score=distinct*2+deep;if(score>bestScore){bestScore=score;best=i}});return best}
+const isHome=u=>{try{return new URL(u).pathname.replace(/\/+$/,"")===""}catch(e){return false}};
+function buildExamples(){const rows=(TPL.rows||[]).slice(0,5);
+ if(!rows.length){$("examples").innerHTML=msg("warn","Your sample has no example rows. Add 1 or 2 real rows from the website to the sample sheet and upload it again.");return}
+ const lc=itemLinkCol();
+ $("examples").innerHTML=rows.map((r,i)=>{const url=lc>=0&&i<2?(r[lc]||""):"";const label=r.filter(v=>v&&!/^https?:/.test(v)).slice(0,2).join(" · ");
+  return `<div class="exrow"><span title="${esc(label)}"><b>Row ${i+1}</b> ${esc(label)}</span><input class="inp" data-ex="${i}" placeholder="https://... page where row ${i+1} came from" value="${esc(url)}"></div>`}).join("")}
+$("learnBtn").onclick=async()=>{const examples=[...document.querySelectorAll("[data-ex]")].map(i=>({url:i.value.trim(),row:+i.dataset.ex})).filter(e=>e.url);
+ if(!examples.length){$("learnMsg").innerHTML=msg("warn","Paste at least one example page link.");return}
+ const home=examples.filter(e=>isHome(e.url));
+ if(home.length){$("learnMsg").innerHTML=msg("warn",`Row ${home.map(e=>e.row+1).join(", ")}: that link is the website's homepage. Paste the page of that row's item instead (for example the course or product page).`);return}
+ $("learnBtn").disabled=true;$("learnMsg").innerHTML=busy(`Opening ${examples.length} example page${examples.length>1?"s":""} and finding your values...`);
+ const r=await api("/api/any/learn",{template:TPL.id,examples});$("learnBtn").disabled=false;
+ if(r.error){$("learnMsg").innerHTML=msg("bad",esc(r.error));return}
+ LEARN=Object.assign(r,{examples:examples.map(e=>e.url)});
+ const fromPage=r.columns.filter(c=>["found","converted","close"].includes(c.status)).length;
+ $("learnMsg").innerHTML=(r.warnings||[]).map(w=>msg("warn",esc(w.text))).join("")+msg(fromPage?"ok":"warn",`Done. <b>${fromPage}</b> column${fromPage===1?"":"s"} can be read from the pages. Check every row in step 3.`);
+ buildFields();step();$("pF").scrollIntoView({behavior:"smooth",block:"start"})};
+
+/* ---------- 3. fields ---------- */
+const PILL={found:['ok','ph-fill ph-check-circle','Found on the page'],converted:['ok','ph-fill ph-check-circle','Found (converted to your style)'],
+ close:['no','ph ph-warning','Close match: please check'],constant:['mute','ph ph-push-pin','Same in all your rows'],
+ not_found:['no','ph ph-warning','Not on the page'],empty_sample:['mute','ph ph-minus','No sample value'],
+ auto:['ok','ph-fill ph-check-circle','Numbered 1, 2, 3...'],formula:['ok','ph-fill ph-check-circle','Formula from your sample']};
+let DEFAULTS={};
+function buildFields(){CHOICE=[];DEFAULTS={};
+ const st=LEARN.columns.reduce((a,c)=>(a[c.status]=(a[c.status]||0)+1,a),{});
+ const fromPage=(st.found||0)+(st.converted||0)+(st.close||0);
+ $("fLead").innerHTML=`<b>${fromPage}</b> column${fromPage===1?"":"s"} will be read from each page`+(st.close?` (${st.close} close match${st.close>1?"es":""} to check)`:"")+
+  `, <b>${st.constant||0}</b> are your own values (the same in every sample row)`+(st.not_found?`, <b>${st.not_found}</b> not found`:"")+". Change any row if it is wrong.";
+ $("fields").innerHTML=LEARN.columns.map((c,i)=>{const [pk,pi,pt]=PILL[c.status]||PILL.not_found;
+  let choice,how;
+  if(c.status==="auto"||c.status==="formula"){CHOICE[i]={kind:"blank"};return row(c,i,pk,pi,pt,"Filled automatically like your sample","",false)}
+  if(c.rule){CHOICE[i]={kind:"rule",rule:c.rule}}else if(c.status==="constant"){CHOICE[i]={kind:"fixed"};DEFAULTS[c.header]=c.constant}else{CHOICE[i]={kind:"fixed"}}
+  const val=c.rule?(c.values.find(v=>v!==null&&v!=="")??""):c.status==="constant"?c.constant:"";
+  const opts=[];if(c.rule)opts.push(`<option value="rule" selected>From the page: ${esc(c.rule.desc||"learned spot")}</option>`);
+  opts.push(`<option value="fixed" ${!c.rule?"selected":""}>My own value, same on every row${c.status==="constant"?` ("${esc(c.constant)}")`:""}</option>`,
+   '<option value="blank">Leave blank</option>','<option value="pick">Pick another spot on the page...</option>');
+  return row(c,i,pk,pi,pt,val,`<select class="inp" data-col="${i}">${opts.join("")}</select>`,true)}).join("");
+ $("fields").querySelectorAll("[data-col]").forEach(s=>s.onchange=()=>onChoice(+s.dataset.col,s.value));
+ const pc=LEARN.patterns||[{pattern:LEARN.pattern,label:"Pages like the examples"}];
+ const depth=new URL(LEARN.examples[0]).pathname.split("/").filter(Boolean).length,pick=pc.length>1&&depth>=4?1:0;
+ $("patChoices").innerHTML=pc.map((c,i)=>`<label class="q" style="display:flex;gap:10px;align-items:center;cursor:pointer;padding:10px 14px">
+   <input type="radio" name="pat" value="${i}" ${i===pick?"checked":""} style="accent-color:var(--accent)"><div><b style="font-family:var(--mono);font-size:13px">${esc(c.label)}</b>
+   <div class="help" style="margin:2px 0 0">${i===0?"Only the section of your examples":i===pc.length-1&&pc.length>1?"Broadest: every section at this depth":"Broader: all sections at this level"}</div></div></label>`).join("");
+ $("patChoices").querySelectorAll("input").forEach(r=>r.onchange=()=>{$("pattern").value=pc[+r.value].pattern;checkPattern()});
+ $("pattern").value=pc[pick].pattern;checkPattern();
+ $("startUrl").value=new URL(LEARN.examples[0]).origin+"/";$("fileName").value=LEARN.domain.replace(/^www\./,"")+" - "+TPL.name}
+function row(c,i,pk,pi,pt,val,ctl,picker){const sample=(c.samples||[]).find(Boolean)||"";
+ return `<div class="fieldrow" id="fr${i}"><div class="h"><b>${esc(c.header)}</b><span>Your sample: ${esc(sample)||"(empty)"}</span></div>
+  <div><div class="v" id="val${i}" title="${esc(val)}">${esc(val)||"&nbsp;"}</div><span class="pill ${pk}"><i class="${pi}"></i>${pt}</span></div>
+  <div>${ctl}${picker?`<div class="picker hidden" id="pk${i}"><input class="inp" placeholder="Search the page, e.g. price, date, location" data-q="${i}"><div class="plist" id="pl${i}"></div></div>`:""}</div></div>`}
+function onChoice(i,v){const c=LEARN.columns[i];$("pk"+i).classList.add("hidden");
+ if(v==="rule"){CHOICE[i]={kind:"rule",rule:c.rule};setVal(i,c.values.find(x=>x!==null&&x!=="")??"")}
+ else if(v==="fixed"){CHOICE[i]={kind:"fixed"};setVal(i,c.status==="constant"?c.constant:"(you type it in step 5)")}
+ else if(v==="blank"){CHOICE[i]={kind:"blank"};setVal(i,"(blank)")}
+ else{$("pk"+i).classList.remove("hidden");const q=document.querySelector(`[data-q="${i}"]`);q.value="";q.oninput=()=>listFields(i,q.value);listFields(i,"");q.focus()}}
+function setVal(i,v){$("val"+i).textContent=v;$("val"+i).title=v}
+function listFields(i,q){const words=q.toLowerCase().split(/\s+/).filter(Boolean),h=LEARN.columns[i].header.toLowerCase();
+ let items=LEARN.fields.map((f,j)=>({f,j,score:(f.label.toLowerCase().includes(h)||h.includes(f.label.toLowerCase().replace(/"/g,"")))?2:0}))
+  .filter(x=>words.every(w=>(x.f.label+" "+x.f.value).toLowerCase().includes(w))).sort((a,b)=>b.score-a.score).slice(0,40);
+ $("pl"+i).innerHTML=items.length?items.map(x=>`<button data-f="${x.j}"><b>${esc(x.f.label.replace(/^Page data: /,"").replace(/^"|"$/g,""))}</b><span>${esc(x.f.value)}</span></button>`).join(""):'<div class="empty">Nothing on the page matches that.</div>';
+ $("pl"+i).querySelectorAll("button").forEach(b=>b.onclick=()=>{const f=LEARN.fields[+b.dataset.f];CHOICE[i]={kind:"rule",rule:Object.assign({desc:f.label},f.rule)};
+  setVal(i,f.value);$("pk"+i).classList.add("hidden");const sel=document.querySelector(`[data-col="${i}"]`);
+  let o=sel.querySelector('option[value="custom"]');if(!o){o=document.createElement("option");o.value="custom";sel.insertBefore(o,sel.firstChild)}o.textContent="From the page: "+f.label;sel.value="custom"})}
+function checkPattern(){let re;try{re=new RegExp($("pattern").value)}catch(e){$("patMsg").innerHTML=msg("bad","This pattern is not valid.");return false}
+ const ok=LEARN.examples.filter(u=>re.test(new URL(u).pathname)).length;
+ $("patMsg").innerHTML=ok===LEARN.examples.length?msg("ok",`Matches all ${ok} example page${ok>1?"s":""}.`):msg("warn",`Matches ${ok} of ${LEARN.examples.length} example pages. Those pages would be missed.`);return true}
+$("pattern").oninput=checkPattern;
+$("saveBtn").onclick=async()=>{if(!checkPattern())return;
+ const columns=LEARN.columns.map((c,i)=>({header:c.header,rule:CHOICE[i].kind==="rule"?CHOICE[i].rule:null,sample:(c.samples||[]).find(Boolean)||"",typed:CHOICE[i].kind==="fixed",
+  default:c.status==="constant"?c.constant:""}));
+ const r=await api("/api/any/save",{template:TPL.id,domain:LEARN.domain,pattern:$("pattern").value,columns,examples:LEARN.examples});
+ if(r.error){$("saveMsg").innerHTML=msg("bad",esc(r.error));return}
+ PROFILE={id:r.id,typed:columns.filter(c=>c.typed).map(c=>c.header)};$("saveMsg").innerHTML=msg("ok","Site setup saved. Next time pick it from the left to go straight to collecting.");
+ buildFixed(null,DEFAULTS);loadProfiles();step();$("pC").scrollIntoView({behavior:"smooth",block:"start"})};
+let LASTPREVIEW=null;
+function buildFixed(saved,defaults){saved=saved||{};defaults=defaults||{};const typed=PROFILE.typed||[];$("fixedWrap").classList.toggle("hidden",!typed.length);
+ $("fixed").innerHTML=typed.map(h=>`<div><label class="f">${esc(h)}</label><input class="inp" data-fixed="${esc(h)}" value="${esc(saved[h]??defaults[h]??"")}" placeholder="empty = blank"></div>`).join("");
+ $("fixed").querySelectorAll("input").forEach(i=>i.oninput=()=>{if(LASTPREVIEW)LASTPREVIEW()})}
+
+/* ---------- 4. collect ---------- */
+$("scanBtn").onclick=async()=>{ROWS=[];$("result").innerHTML="";$("scanMsg").innerHTML="";
+ const r=await api("/api/any/scan",{profile:PROFILE.id,start_url:$("startUrl").value.trim(),max_pages:+$("maxPages").value,rescan:$("rescan").checked});
+ if(r.error){$("scanMsg").innerHTML=msg("bad",esc(r.error));return}
+ t0=Date.now();$("scanBtn").disabled=true;poll()};
+async function poll(){clearTimeout(timer);const r=await api("/api/any/status?id="+encodeURIComponent(PROFILE.id));
+ if(r.error){$("scanMsg").innerHTML=msg("bad",esc(r.error));if(r.offline)timer=setTimeout(poll,8000);return}
+ let pages=0;for(const l of r.log){const m=l.match(/crawled (\d+) pages/)||l.match(/crawl finished: (\d+) pages/);if(m)pages=+m[1]}
+ const live=r.state==="scanning"||r.state==="queued";$("prog").classList.toggle("hidden",!live&&r.state!=="done");
+ $("progSpin").classList.toggle("hidden",!live);$("progBar").classList.toggle("hidden",!live);
+ $("progTitle").textContent=r.state==="queued"?"Waiting: another scan is running":live?"Collecting pages like your examples":"Collection finished";
+ $("stPages").textContent=pages||"-";$("stRows").textContent=r.count;$("log").textContent=r.log.join("\n");
+ if(live)$("stTime").textContent=(s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0"))(Math.floor((Date.now()-t0)/1000));
+ const cols=TPL.columns.map(c=>c.header);
+ LASTPREVIEW=()=>{$("preview").innerHTML=`<div class="sub">${live?"Latest rows":"Preview"} <span>(${r.count} row${r.count===1?"":"s"}${r.count>25?", showing 25":""}. <b style="color:var(--accent);font-weight:600">Green</b> = your own value from step 5, same on every row)</span></div>`+table(cols,r.preview,live?"No rows yet...":"No rows.",specialCols())};LASTPREVIEW();
+ if(live){timer=setTimeout(poll,2500);return}
+ $("scanBtn").disabled=false;
+ if(r.state==="done"){ROWS=r.preview;$("scanMsg").innerHTML=msg("ok",`Collected <b>${r.count} rows</b>. Check the preview, then download.`)}
+ else if(r.state==="empty")$("scanMsg").innerHTML=msg("warn","No pages like your examples were found from that start link. Try a listing or category page as the start link, or loosen the page pattern in step 3.");
+ else if(r.state==="error")$("scanMsg").innerHTML=msg("bad","The collection stopped unexpectedly. Please try again.");
+ step()}
+
+/* ---------- 5. download ---------- */
+$("genBtn").onclick=async()=>{const fixed={};$("fixed").querySelectorAll("[data-fixed]").forEach(i=>fixed[i.dataset.fixed]=i.value.trim());
+ $("genBtn").disabled=true;$("result").innerHTML=busy("Creating your Excel...");
+ const r=await api("/api/any/export",{profile:PROFILE.id,fixed,file_name:$("fileName").value.trim()});$("genBtn").disabled=false;
+ if(r.error){$("result").innerHTML=msg("bad",esc(r.error));return}
+ $("result").innerHTML=`<div class="filecard"><i class="ph ph-file-xls ico"></i><div class="grow"><b>${esc(r.xlsx)}</b><span>${r.rows} rows. ${r.review?`${r.review} pages had a missing value (see the review list).`:"Every row is complete."}</span></div>
+  <div class="dl"><a class="btn" href="/api/download?f=${encodeURIComponent(r.xlsx)}"><i class="ph ph-download-simple"></i>Excel</a>${r.csv?`<a class="btn ghost" style="height:44px" href="/api/download?f=${encodeURIComponent(r.csv)}">Review list</a>`:""}</div></div>`;loadFiles()};
+
+/* ---------- saved site setups ---------- */
+async function loadProfiles(){const r=await api("/api/any/profiles");if(!Array.isArray(r))return;
+ $("profiles").innerHTML=r.length?r.map(p=>`<button data-p="${esc(p.id)}"><b>${esc(p.domain.replace(/^www\./,""))}</b><span>${esc(p.name.replace(/^.*?\(/,"").replace(/\)$/,""))} · ${esc(p.created)}</span></button>`).join(""):'<div class="empty">None yet.</div>';
+ $("profiles").querySelectorAll("button").forEach(b=>b.onclick=()=>openProfile(b.dataset.p))}
+async function openProfile(id){const p=await api("/api/any/profile?id="+encodeURIComponent(id));if(p.error)return;
+ $("tplSel").value=p.template;const r=await api("/api/template?id="+encodeURIComponent(p.template));if(r.error){$("scanMsg").innerHTML=msg("bad","This setup's format was deleted.");return}
+ TPL=r.template;showSample();buildExamples();LEARN=null;
+ PROFILE={id:p.id,typed:p.columns.filter(c=>c.typed).map(c=>c.header)};buildFixed(p.fixed,Object.fromEntries(p.columns.filter(c=>c.default).map(c=>[c.header,c.default])));
+ $("startUrl").value=`https://${p.domain}/`;$("fileName").value=p.domain.replace(/^www\./,"")+" - "+TPL.name;$("pattern").value=p.pattern;
+ ROWS=[];step();$("pC").scrollIntoView({behavior:"smooth",block:"start"});poll()}
+async function loadFiles(){const r=await api("/api/files");if(!Array.isArray(r))return;
+ $("files").innerHTML=r.length?r.map(f=>`<a href="/api/download?f=${encodeURIComponent(f.xlsx)}"><i class="ph ph-file-xls"></i>${esc(f.xlsx)}<span class="t">${esc(f.time)}</span></a>`).join(""):'<div class="empty">No files yet.</div>'}
+loadTemplates();loadProfiles();loadFiles();step();
+</script>
+</body>
+</html>

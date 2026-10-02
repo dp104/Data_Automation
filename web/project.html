@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Scraper - Project</title>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link rel="stylesheet" href="/app.css">
+<style>
+.chg{display:grid;gap:8px;margin-top:10px}
+.chg .c{display:grid;grid-template-columns:minmax(0,2fr) auto auto;gap:14px;align-items:center;padding:10px 14px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface)}
+.chg .c b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .chg .c a{color:var(--accent);font-size:12.5px}
+.chg .old{color:var(--ink-3);text-decoration:line-through;font-variant-numeric:tabular-nums} .chg .new{font-weight:700;font-variant-numeric:tabular-nums}
+.down{color:var(--ok)} .up{color:var(--bad)}
+.notice{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;color:var(--ink-2);padding:12px 14px;border-radius:var(--r-sm);background:var(--sunken);margin-top:12px}
+.notice i{color:var(--accent);margin-top:2px}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="mark"><i class="ph ph-squares-four" style="font-size:18px" id="hdIcon"></i></div>
+  <div class="brand"><b>Data Scraper</b><span id="hdType">Project</span></div>
+  <nav class="modes"><a href="/" class="on"><i class="ph ph-squares-four"></i><span>All projects</span></a></nav>
+  <!--WHO-->
+</div></header>
+
+<div class="wrap">
+  <aside class="rail">
+    <ol class="steps" id="steps">
+      <li data-s="1" class="active"><span class="dot">1</span><div>Format<small>Your columns</small></div></li>
+      <li data-s="2"><span class="dot">2</span><div>Websites<small>Where to collect</small></div></li>
+      <li data-s="3"><span class="dot">3</span><div>Collect<small>Read the sites</small></div></li>
+      <li data-s="4"><span class="dot">4</span><div>Results<small>Check the data</small></div></li>
+      <li data-s="5"><span class="dot">5</span><div>Download<small>Your Excel</small></div></li>
+    </ol>
+    <div class="side"><h3>Projects of this type</h3><div class="recent" id="plist"><div class="empty">Loading...</div></div>
+      <div style="margin-top:10px"><a class="btn ghost" href="#" id="newBtn" style="width:100%;height:38px;text-decoration:none"><i class="ph ph-plus"></i>New project</a></div></div>
+  </aside>
+
+  <main class="flow">
+    <section class="pagehead"><span class="ic"><i class="ph ph-squares-four" id="phIcon"></i></span><div><h1 id="title">Project</h1><p id="blurb"></p></div></section>
+
+    <section class="panel" id="pF">
+      <h2>1. Sheet format</h2>
+      <p class="lead">Use the standard format for this type, or your own sheet (the tool matches your columns to this type's data).</p>
+      <div class="fmtopt">
+        <label><input type="radio" name="fmt" value="standard" checked><div><b>Standard format</b><span id="stdInfo"></span></div></label>
+        <label><input type="radio" name="fmt" value="own"><div><b>My own sheet</b><span>Upload an Excel with your header row. Columns the websites cannot fill get a value you type, or stay blank.</span></div></label>
+      </div>
+      <div class="cols" id="stdCols"></div>
+      <div id="ownWrap" class="hidden" style="margin-top:14px">
+        <div class="urlrow"><input class="inp" id="tplName" placeholder="Name for your format" maxlength="60">
+          <label class="btn ghost" style="height:44px" for="tplFile"><i class="ph ph-upload-simple"></i>Upload .xlsx</label><input type="file" id="tplFile" accept=".xlsx" class="hidden"></div>
+        <div class="urlrow" style="margin-top:10px"><select class="inp" id="tplSel"></select></div>
+        <div id="tplMsg"></div>
+        <div class="maptable" id="mapRows" style="margin-top:12px"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="pW">
+      <h2>2. Websites</h2>
+      <p class="lead">One link per line: a listing, category or search-results page works best (for example a category of products or a company's jobs page). The tool reads every result, follows "next page", and opens each item's page for full details.</p>
+      <label class="f" for="pname">Project name</label><input class="inp" id="pname" maxlength="80" style="margin-bottom:12px">
+      <label class="f" for="sites">Website links</label>
+      <textarea class="inp" id="sites" placeholder="https://www.example-shop.com/category/laptops&#10;https://another-site.com/listings"></textarea>
+      <div class="notice"><i class="ph ph-shield-check"></i><div>Use only websites whose terms allow collecting their data. The tool follows each site's robots rules and pace, skips pages the site asks not to be collected, and slows down if a site asks it to.</div></div>
+      <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin-top:14px">
+        <div><label class="f" for="maxPages">Pages to check per site (at most)</label>
+          <select class="inp" id="maxPages"><option value="100">100 (quick test)</option><option value="500">500</option><option value="1500" selected>1,500</option><option value="5000">5,000 (large site)</option></select></div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="runBtn"><i class="ph ph-play"></i>Save and collect</button></div>
+      <div id="wMsg"></div>
+    </section>
+
+    <section class="panel locked" id="pC">
+      <h2>3. Collecting</h2>
+      <div id="prog" class="progress hidden">
+        <div class="row"><div class="spin" id="spin"></div><span id="progTitle">Collecting</span></div>
+        <div class="bar" id="bar"><i></i></div>
+        <div class="stats"><div class="stat"><b id="stPages">0</b><span>pages checked</span></div><div class="stat"><b id="stRows">0</b><span>items found</span></div><div class="stat"><b id="stTime">0:00</b><span>elapsed</span></div></div>
+        <details class="log"><summary>Show technical log</summary><pre id="log"></pre></details>
+      </div>
+      <div id="cMsg"></div>
+    </section>
+
+    <section class="panel locked" id="pR">
+      <h2>4. Results</h2>
+      <p class="lead" id="rLead"></p>
+      <div id="changesWrap" class="hidden"><div class="sub" style="margin-top:0">Price changes since the last check</div><div class="chg" id="changes"></div></div>
+      <div id="preview"></div>
+      <div style="margin-top:14px" id="recheckWrap" class="hidden"><button class="btn ghost" id="recheckBtn" style="height:40px"><i class="ph ph-arrows-clockwise"></i>Check prices again now</button></div>
+    </section>
+
+    <section class="panel locked" id="pX">
+      <h2>5. Download</h2>
+      <div id="fixedWrap" class="hidden"><div class="sub" style="margin-top:0">Your own columns <span>(same value on every row; empty = blank)</span></div><div class="grid" id="fixed"></div></div>
+      <button class="btn" id="genBtn" style="margin-top:6px"><i class="ph ph-file-xls"></i>Create Excel</button>
+      <div id="result"></div>
+    </section>
+  </main>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const qs=new URLSearchParams(location.search);let TYPE=qs.get("type"),PID=qs.get("id"),T=null,FIELDS=[],TPL=null,MAP=null,timer=null,t0=0,VIEW=null;
+async function api(p,body){try{const r=await fetch(p,body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{});return await r.json()}catch(e){return{error:"Cannot reach the scraper. Check that it is running."}}}
+function msg(kind,text,icon){return `<div class="msg ${kind}"><i class="${icon||(kind==="ok"?"ph-fill ph-check-circle":"ph ph-warning-circle")}"></i><div>${text}</div></div>`}
+const busy=t=>msg("ok",`<div style="display:flex;gap:10px;align-items:center"><div class="spin"></div>${t}</div>`,"hidden");
+function step(n){document.querySelectorAll("#steps li").forEach(li=>{const s=+li.dataset.s;li.classList.toggle("active",s===n);li.classList.toggle("done",s<n)});
+ $("pC").classList.toggle("locked",n<3);$("pR").classList.toggle("locked",n<4);$("pX").classList.toggle("locked",n<4)}
+const fmt=()=>document.querySelector('input[name="fmt"]:checked').value;
+
+async function init(){const types=await api("/api/types");T=(types||[]).find(x=>x.id===TYPE);if(!T||T.page){location.href=T&&T.page?T.page:"/";return}
+ document.title="Data Scraper - "+T.name;$("title").textContent=T.name;$("blurb").textContent=T.blurb;$("hdType").textContent=T.name;$("hdIcon").className="ph "+T.icon;$("phIcon").className="ph "+T.icon;$("sites").placeholder=(T.examples||[]).join("\n");
+ $("stdInfo").textContent=`${T.columns.length} columns made for ${T.name.toLowerCase()}.`;$("stdCols").innerHTML=T.columns.map(c=>`<span>${esc(c)}</span>`).join("");
+ $("pname").value=T.name;$("newBtn").href="/project?type="+TYPE;loadList();
+ const tl=await api("/api/templates");$("tplSel").innerHTML='<option value="">Or choose a saved format...</option>'+(tl||[]).filter(x=>!x.id.startsWith("standard-")).map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");
+ if(PID)openProject(PID)}
+document.querySelectorAll('input[name="fmt"]').forEach(r=>r.onchange=()=>{$("ownWrap").classList.toggle("hidden",fmt()!=="own");$("stdCols").classList.toggle("hidden",fmt()!=="standard")});
+
+/* ---------- own format: upload + mapping ---------- */
+$("tplFile").onchange=async()=>{const f=$("tplFile").files[0];if(!f)return;$("tplMsg").innerHTML=busy("Reading your sheet...");
+ const data=await new Promise(res=>{const rd=new FileReader();rd.onload=()=>res(String(rd.result).split(",")[1]);rd.readAsDataURL(f)});
+ const r=await api("/api/template/learn",{name:$("tplName").value.trim()||f.name.replace(/\.xlsx$/i,""),filename:f.name,data});$("tplFile").value="";
+ if(r.error){$("tplMsg").innerHTML=msg("bad",esc(r.error));return}
+ r.template.answered=true;const s=await api("/api/template/save",{template:r.template});if(s.error){$("tplMsg").innerHTML=msg("bad",esc(s.error));return}
+ $("tplMsg").innerHTML=msg("ok",`Read ${r.template.columns.length} columns. Check how each is filled below.`);await loadMapping(s.id)};
+$("tplSel").onchange=()=>{if($("tplSel").value)loadMapping($("tplSel").value)};
+async function loadMapping(tid,saved){const r=await api(`/api/project/mapping?type=${TYPE}&template=${encodeURIComponent(tid)}`);if(r.error){$("tplMsg").innerHTML=msg("bad",esc(r.error));return}
+ TPL=tid;FIELDS=r.fields;MAP=saved||r.mapping;
+ $("mapRows").innerHTML=`<div class="maprow head" style="grid-template-columns:minmax(0,1fr) minmax(0,1.4fr)"><span>Your column</span><span>Filled with</span></div>`+MAP.map((m,i)=>{
+  if(m.serial||m.formula)return `<div class="maprow" style="grid-template-columns:minmax(0,1fr) minmax(0,1.4fr)"><b>${esc(m.header)}</b><span class="pill ok">${m.serial?"Numbered 1, 2, 3...":"Formula from your sheet"}</span></div>`;
+  return `<div class="maprow" style="grid-template-columns:minmax(0,1fr) minmax(0,1.4fr)"><b>${esc(m.header)}</b><select class="inp" data-m="${i}">
+   ${FIELDS.filter(f=>f.key!=="serial").map(f=>`<option value="${f.key}" ${f.key===m.key?"selected":""}>From the websites: ${esc(f.header)}</option>`).join("")}
+   <option value="" ${!m.key?"selected":""}>My own value, same on every row</option></select></div>`}).join("");
+ $("mapRows").querySelectorAll("[data-m]").forEach(s=>s.onchange=()=>{MAP[+s.dataset.m].key=s.value||null;buildFixed()});buildFixed()}
+function buildFixed(saved){saved=saved||{};const own=fmt()==="own"&&MAP?MAP.filter(m=>!m.key&&!m.serial&&!m.formula).map(m=>m.header):[];
+ $("fixedWrap").classList.toggle("hidden",!own.length);
+ $("fixed").innerHTML=own.map(h=>`<div><label class="f">${esc(h)}</label><input class="inp" data-fixed="${esc(h)}" value="${esc(saved[h]??"")}" placeholder="empty = blank"></div>`).join("")}
+
+/* ---------- save + collect ---------- */
+$("runBtn").onclick=async()=>{const sites=$("sites").value.split(/\s+/).map(x=>x.trim()).filter(Boolean);
+ if(!sites.length){$("wMsg").innerHTML=msg("warn","Paste at least one website link.");return}
+ if(fmt()==="own"&&!TPL){$("wMsg").innerHTML=msg("warn","Upload or choose your own sheet in step 1, or pick the standard format.");return}
+ const r=await api("/api/project/save",{id:PID,type:TYPE,name:$("pname").value.trim(),sites,format:fmt()==="own"?TPL:"standard",mapping:fmt()==="own"?MAP:null});
+ if(r.error){$("wMsg").innerHTML=msg("bad",esc(r.error));return}
+ PID=r.id;history.replaceState(null,"",`/project?type=${TYPE}&id=${PID}`);$("wMsg").innerHTML="";loadList();startRun()};
+async function startRun(){const r=await api("/api/project/run",{id:PID,max_pages:+$("maxPages").value});if(r.error){$("cMsg").innerHTML=msg("bad",esc(r.error));return}
+ t0=Date.now();$("runBtn").disabled=true;$("recheckBtn").disabled=true;step(3);$("pC").scrollIntoView({behavior:"smooth",block:"start"});poll()}
+$("recheckBtn").onclick=startRun;
+async function poll(){clearTimeout(timer);const r=await api("/api/project/status?id="+encodeURIComponent(PID));if(r.error){$("cMsg").innerHTML=msg("bad",esc(r.error));timer=setTimeout(poll,8000);return}
+ let pages=0;for(const l of r.log){const m=l.match(/crawled (\d+) pages/)||l.match(/crawl finished: (\d+) pages/);if(m)pages+=0,pages=+m[1]}
+ const live=r.state==="scanning"||r.state==="queued";$("prog").classList.remove("hidden");$("spin").classList.toggle("hidden",!live);$("bar").classList.toggle("hidden",!live);
+ $("progTitle").textContent=r.state==="queued"?"Waiting: another collection is running":live?"Collecting":"Finished";$("stPages").textContent=pages||"-";$("stRows").textContent=r.count;$("log").textContent=r.log.join("\n");
+ if(live){$("stTime").textContent=(s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0"))(Math.floor((Date.now()-t0)/1000));timer=setTimeout(poll,2500);return}
+ $("runBtn").disabled=false;$("recheckBtn").disabled=false;
+ $("cMsg").innerHTML=(r.notes||[]).map(n=>msg("warn",esc(n))).join("")+(r.state==="done"?msg("ok",`Collected <b>${r.count}</b> items.`):r.state==="empty"?msg("warn","Nothing was found. Try a listing or category page of the site as the link, or check the site allows collecting."):r.state==="error"?msg("bad","The collection stopped unexpectedly. Please try again."):"");
+ if(r.state==="done"||r.state==="empty")showResults()}
+
+/* ---------- results ---------- */
+async function showResults(){const v=await api("/api/project?id="+encodeURIComponent(PID));if(v.error)return;VIEW=v;
+ const keys=v.fields.filter(f=>!["serial"].includes(f.key));
+ $("rLead").textContent=v.count?`${v.count} items from the last collection (${v.finished_at.slice(0,16).replace("T"," ")}). Blank cells mean the website did not show that value.`:"No items yet.";
+ const rows=v.preview.map((r,i)=>{const o={};v.fields.forEach(f=>o[f.header]=f.key==="serial"?i+1:r[f.key]);return o});
+ const cols=v.fields.map(f=>f.header);
+ $("preview").innerHTML=rows.length?`<div class="sub">Preview <span>(${v.count} items${v.count>30?", showing 30":""})</span></div><div class="tablewrap"><table class="data"><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${cols.map(c=>{const x=r[c];return x===null||x===undefined||x===""?'<td class="miss">blank</td>':`<td title="${esc(x)}">${/^https?:/.test(String(x))?`<a href="${esc(x)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(x)}</a>`:esc(x)}</td>`}).join("")}</tr>`).join("")}</tbody></table></div>`:"";
+ const tracking=!!v.type.tracking;$("recheckWrap").classList.toggle("hidden",!tracking||!v.count);
+ $("changesWrap").classList.toggle("hidden",!tracking);
+ if(tracking){const pk={product:"price",hotels:"night",flights:"fare",realestate:"price"}[TYPE]||"price";
+  $("changes").innerHTML=v.changes.length?v.changes.map(c=>`<div class="c"><div style="min-width:0"><b>${esc(c.name||c.title||c.airline||c.url)}</b><a href="${esc(c.url)}" target="_blank" rel="noopener">Open page</a></div>
+   <span class="old">${esc(c._was)}</span><span class="new ${c._change}">${esc(c[pk])} ${esc(c.currency||"")} <i class="ph ph-arrow-${c._change==="down"?"down":"up"}"></i> ${esc(c.change.split(" (")[0].replace(/^(Up|Down) /,""))}</span></div>`).join(""):
+   `<div class="empty">${v.count?"No price changes since the last check. Use \"Check prices again\" later to compare.":"Collect first."}</div>`}
+ step(v.count?4:3)}
+
+/* ---------- download ---------- */
+$("genBtn").onclick=async()=>{const fixed={};$("fixed").querySelectorAll("[data-fixed]").forEach(i=>fixed[i.dataset.fixed]=i.value.trim());
+ $("genBtn").disabled=true;$("result").innerHTML=busy("Creating your Excel...");const r=await api("/api/project/export",{id:PID,fixed});$("genBtn").disabled=false;
+ if(r.error){$("result").innerHTML=msg("bad",esc(r.error));return}step(6);
+ $("result").innerHTML=`<div class="filecard"><i class="ph ph-file-xls ico"></i><div class="grow"><b>${esc(r.xlsx)}</b><span>${r.rows} rows${r.missing_key?`, ${r.missing_key} without the main value (shown blank)`:""}.</span></div><div class="dl"><a class="btn" href="/api/download?f=${encodeURIComponent(r.xlsx)}"><i class="ph ph-download-simple"></i>Excel</a></div></div>`};
+
+/* ---------- saved projects ---------- */
+async function loadList(){const r=await api("/api/projects");if(!Array.isArray(r))return;const mine=r.filter(p=>p.type===TYPE);
+ $("plist").innerHTML=mine.length?mine.map(p=>`<button data-p="${esc(p.id)}"><b>${esc(p.name)}</b><span>${p.rows} items${p.changes?` · ${p.changes} price changes`:""}</span></button>`).join(""):'<div class="empty">None yet.</div>';
+ $("plist").querySelectorAll("button").forEach(b=>b.onclick=()=>{location.href=`/project?type=${TYPE}&id=${b.dataset.p}`})}
+async function openProject(id){const v=await api("/api/project?id="+encodeURIComponent(id));if(v.error){$("wMsg").innerHTML=msg("bad","Project not found.");return}
+ const p=v.project;$("pname").value=p.name;$("sites").value=p.sites.join("\n");
+ if(p.format&&p.format!=="standard"){document.querySelector('input[name="fmt"][value="own"]').checked=true;$("ownWrap").classList.remove("hidden");$("stdCols").classList.add("hidden");$("tplSel").value=p.format;await loadMapping(p.format,p.mapping)}
+ const st=await api("/api/project/status?id="+encodeURIComponent(id));if(st.state==="scanning"||st.state==="queued"){t0=Date.now();step(3);poll();return}
+ if(v.count){step(4);showResults()}}
+init();
+</script>
+</body>
+</html>
