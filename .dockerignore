@@ -1,0 +1,16 @@
+.git/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+saas.env
+cache/
+outputs/
+logs/
+configs/
+profiles/
+projects/
+templates/*
+!templates/standard-university.json
+!templates/standard-university.xlsx
+.playwright-mcp/

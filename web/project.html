@@ -6,6 +6,10 @@
 <title>Data Scraper - Project</title>
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link rel="icon" href="/favicon.ico" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="/app.css">
 <style>
 .chg{display:grid;gap:8px;margin-top:10px}
@@ -103,6 +107,7 @@
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const safeLink=(u,label)=>/^https?:/.test(String(u??""))?`<a href="${esc(u)}" target="_blank" rel="noopener">${label?esc(label):esc(u)}</a>`:esc(label??u);
 const qs=new URLSearchParams(location.search);let TYPE=qs.get("type"),PID=qs.get("id"),T=null,FIELDS=[],TPL=null,MAP=null,timer=null,t0=0,VIEW=null;
 async function api(p,body){try{const r=await fetch(p,body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{});return await r.json()}catch(e){return{error:"Cannot reach the scraper. Check that it is running."}}}
 function msg(kind,text,icon){return `<div class="msg ${kind}"><i class="${icon||(kind==="ok"?"ph-fill ph-check-circle":"ph ph-warning-circle")}"></i><div>${text}</div></div>`}
@@ -168,7 +173,7 @@ async function showResults(){const v=await api("/api/project?id="+encodeURICompo
  const tracking=!!v.type.tracking;$("recheckWrap").classList.toggle("hidden",!tracking||!v.count);
  $("changesWrap").classList.toggle("hidden",!tracking);
  if(tracking){const pk={product:"price",hotels:"night",flights:"fare",realestate:"price"}[TYPE]||"price";
-  $("changes").innerHTML=v.changes.length?v.changes.map(c=>`<div class="c"><div style="min-width:0"><b>${esc(c.name||c.title||c.airline||c.url)}</b><a href="${esc(c.url)}" target="_blank" rel="noopener">Open page</a></div>
+  $("changes").innerHTML=v.changes.length?v.changes.map(c=>`<div class="c"><div style="min-width:0"><b>${esc(c.name||c.title||c.airline||c.url)}</b>${safeLink(c.url,"Open page")}</div>
    <span class="old">${esc(c._was)}</span><span class="new ${c._change}">${esc(c[pk])} ${esc(c.currency||"")} <i class="ph ph-arrow-${c._change==="down"?"down":"up"}"></i> ${esc(c.change.split(" (")[0].replace(/^(Up|Down) /,""))}</span></div>`).join(""):
    `<div class="empty">${v.count?"No price changes since the last check. Use \"Check prices again\" later to compare.":"Collect first."}</div>`}
  step(v.count?4:3)}

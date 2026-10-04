@@ -18,7 +18,8 @@ from urllib.parse import urlparse
 from bs4 import BeautifulSoup, NavigableString, Tag
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PROFILES = os.path.join(HERE, "profiles")
+DATA_DIR = os.environ.get("UNISCRAPE_DATA_DIR") or HERE
+PROFILES = os.path.join(DATA_DIR, "profiles")
 
 SKIP_TAGS = {"script", "style", "noscript", "svg", "iframe", "template", "head"}
 NUM_RE = re.compile(r"-?\d{1,3}(?:[,\s ]\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?")
@@ -475,7 +476,6 @@ def pattern_choices(urls):
     n = max((len(p) for p in paths), default=0)
     if not n or any(len(p) != n for p in paths):
         return [{"pattern": url_pattern(urls), "label": "Pages like the examples"}]
-    base = [p[0] if len({q[i] for q in paths}) == 1 and i < n - 1 else None for i, p in [(i, paths[0]) for i in range(n)]]
     base = [paths[0][i] if all(q[i] == paths[0][i] for q in paths) and i < n - 1 else None for i in range(n)]
     out = []
     literal = [i for i, v in enumerate(base) if v is not None]

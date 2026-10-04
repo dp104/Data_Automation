@@ -17,9 +17,10 @@ import type_engine as tx
 from crawler import Fetcher, TypeCrawler, load_robots, normalise
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PROJECTS = os.path.join(HERE, "projects")
-RUNS = os.path.join(HERE, "cache", "projects")
-DB = os.path.join(HERE, "cache", "history.db")
+DATA_DIR = os.environ.get("UNISCRAPE_DATA_DIR") or HERE
+PROJECTS = os.path.join(DATA_DIR, "projects")
+RUNS = os.path.join(DATA_DIR, "cache", "projects")
+DB = os.path.join(DATA_DIR, "cache", "history.db")
 _db_lock = threading.Lock()
 
 
@@ -77,6 +78,8 @@ def db():
 
 
 PRICE_KEY = {"product": "price", "hotels": "night", "flights": "fare", "realestate": "price"}
+ITEM_LABEL = {"product": "products", "realestate": "properties", "jobs": "job listings", "flights": "flights",
+              "hotels": "hotels", "university": "course pages"}
 
 
 def apply_history(p, rows, at):
@@ -201,7 +204,8 @@ def run(pid, max_pages=1500, log=print):
                     return bool(rows)
                 return False
 
-            crawler = TypeCrawler(site, fetcher, on_page, max_pages=max_pages, log=log, robots=robots)
+            crawler = TypeCrawler(site, fetcher, on_page, max_pages=max_pages, log=log, robots=robots,
+                                  item_label=ITEM_LABEL.get(p["type"], "items"))
             crawler.run([site])
             if getattr(fetcher, "refusals", 0):
                 notes.append(f"{site}: the site asked us to slow down {fetcher.refusals} times; the tool waited and slowed down. "
@@ -286,7 +290,7 @@ def export(p, out_dir, fixed=None):
         mapping = {c["header"]: c.get("key") for c in tpl["columns"]}
     else:
         tpl = te.load(p["format"])
-        mapping = {m["header"]: m.get("key") for m in p.get("mapping", [])}
+        mapping = {m["header"]: m.get("key") for m in p.get("mapping") or []}
     rows = [{h: row.get(k) if k else None for h, k in mapping.items()} for row in r["rows"]]
     t = pt.TYPES[p["type"]]
     safe = re.sub(r'[\\/:*?"<>|]+', " ", p["name"]).strip()[:80] or "Export"

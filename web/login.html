@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign in - Data Scraper</title>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link rel="icon" href="/favicon.ico" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/app.css">
+<style>.fieldhead{display:flex;justify-content:space-between;align-items:baseline}.fieldhead a{font-size:12.5px;color:var(--accent);text-decoration:none;font-weight:600}</style>
+</head>
+<body>
+<div class="authwrap">
+  <div class="authhero">
+    <div class="mark"><i class="ph ph-squares-four" style="font-size:18px"></i></div>
+    <div>
+      <h1>Welcome back to Data Scraper</h1>
+      <p>Turn any website into a clean, ready-to-use spreadsheet - universities, products, jobs, listings and more.</p>
+      <ul class="authpts">
+        <li><i class="ph-fill ph-shield-check"></i><span>Real values read from the pages - nothing made up.</span></li>
+        <li><i class="ph ph-robot"></i><span>Respects every site's robots rules and pace.</span></li>
+        <li><i class="ph ph-file-xls"></i><span>Exports straight into your own Excel format.</span></li>
+      </ul>
+    </div>
+    <div></div>
+  </div>
+  <div class="authside">
+    <div class="authcard">
+
+      <!-- step 1: credentials -->
+      <div class="authstep on" id="step-login">
+        <h2>Sign in</h2>
+        <p class="lead">Use your account email and password.</p>
+        <div class="autherr" id="err1"><i class="ph ph-warning-circle"></i><span id="err1text"></span></div>
+        <form id="f1">
+          <div class="field"><label class="f">Email</label><input class="inp" type="email" id="email" required autocomplete="email"></div>
+          <div class="field">
+            <div class="fieldhead"><label class="f">Password</label><a href="/forgot-password">Forgot password?</a></div>
+            <input class="inp" type="password" id="password" required autocomplete="current-password">
+          </div>
+          <button class="btn" type="submit" id="go1"><i class="ph ph-sign-in"></i>Sign in</button>
+        </form>
+        <div class="switch">No account yet? <a href="/signup">Start your free trial</a></div>
+      </div>
+
+      <!-- step 2: finish verifying an unverified account -->
+      <div class="authstep" id="step-otp">
+        <button class="back" id="back1"><i class="ph ph-arrow-left"></i>Back</button>
+        <h2>Verify your email</h2>
+        <p class="lead">Your account isn't verified yet. We sent a 6-digit code to <b id="otpemail"></b>.</p>
+        <div class="devnote" id="devnote" style="display:none"><i class="ph ph-flask"></i>
+          <span>DEV MODE (no email server configured yet): your code is <b id="devotp"></b>.</span></div>
+        <div class="autherr" id="err2"><i class="ph ph-warning-circle"></i><span id="err2text"></span></div>
+        <form id="f2">
+          <div class="field">
+            <label class="f">6-digit code</label>
+            <input class="otpinput" type="text" id="otp" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required>
+          </div>
+          <div class="otpmeta">
+            <span id="expiry">Expires in 10:00</span>
+            <button type="button" class="resend" id="resend">Resend code</button>
+          </div>
+          <button class="btn" type="submit" id="go2" style="margin-top:16px"><i class="ph ph-check-circle"></i>Verify &amp; sign in</button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let EMAIL="", PASSWORD="", expiryTimer=null, resendTimer=null;
+function next(){const p=new URLSearchParams(location.search).get("next");return p&&p.startsWith("/")?p:"/"}
+function showStep(id){document.querySelectorAll(".authstep").forEach(s=>s.classList.remove("on"));$(id).classList.add("on")}
+async function api(p,body){
+  try{const r=await fetch(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});
+    return {ok:r.ok,data:await r.json()}}
+  catch(e){return{ok:false,data:{error:"Could not reach the server."}}}
+}
+function startExpiryCountdown(seconds){
+  clearInterval(expiryTimer); let left=seconds;
+  const tick=()=>{const m=Math.floor(left/60),s=left%60;$("expiry").textContent=left>0?`Expires in ${m}:${String(s).padStart(2,"0")}`:"Code expired - request a new one";if(left<=0)clearInterval(expiryTimer);left--};
+  tick(); expiryTimer=setInterval(tick,1000);
+}
+function startResendCooldown(seconds){
+  clearInterval(resendTimer); const btn=$("resend"); let left=seconds; btn.disabled=true;
+  const tick=()=>{btn.textContent=left>0?`Resend code (${left}s)`:"Resend code";if(left<=0){clearInterval(resendTimer);btn.disabled=false}left--};
+  tick(); resendTimer=setInterval(tick,1000);
+}
+
+document.getElementById("f1").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const err=$("err1"),go=$("go1");
+  err.classList.remove("show"); go.disabled=true; go.innerHTML='<i class="ph ph-circle-notch" style="animation:rot .8s linear infinite"></i>Signing in...';
+  EMAIL=$("email").value; PASSWORD=$("password").value;
+  const {ok,data}=await api("/api/auth/login",{email:EMAIL,password:PASSWORD});
+  if(ok){location.href=next();return}
+  go.disabled=false; go.innerHTML='<i class="ph ph-sign-in"></i>Sign in';
+  if(data.needs_verification){
+    $("otpemail").textContent=data.email||EMAIL;
+    if(data.dev_otp){$("devnote").style.display="flex";$("devotp").textContent=data.dev_otp}
+    showStep("step-otp"); startExpiryCountdown(600); startResendCooldown(30);
+    return;
+  }
+  $("err1text").textContent=data.error||"Could not sign in.";err.classList.add("show");
+});
+
+$("back1").addEventListener("click",()=>{clearInterval(expiryTimer);clearInterval(resendTimer);showStep("step-login")});
+
+document.getElementById("f2").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const err=$("err2"),go=$("go2");
+  err.classList.remove("show"); go.disabled=true; go.innerHTML='<i class="ph ph-circle-notch" style="animation:rot .8s linear infinite"></i>Verifying...';
+  const {ok,data}=await api("/api/auth/verify-signup-otp",{email:EMAIL,otp:$("otp").value});
+  if(!ok){$("err2text").textContent=data.error||"Could not verify that code.";err.classList.add("show");go.disabled=false;go.innerHTML='<i class="ph ph-check-circle"></i>Verify &amp; sign in';return}
+  location.href=next();
+});
+
+$("resend").addEventListener("click",async()=>{
+  const err=$("err2");
+  const {ok,data}=await api("/api/auth/resend-otp",{email:EMAIL,purpose:"signup"});
+  if(!ok){$("err2text").textContent=data.error||"Could not resend the code.";err.classList.add("show");return}
+  err.classList.remove("show");
+  if(data.dev_otp){$("devnote").style.display="flex";$("devotp").textContent=data.dev_otp}
+  startExpiryCountdown(600); startResendCooldown(30);
+});
+
+$("otp").addEventListener("input",e=>{e.target.value=e.target.value.replace(/\D/g,"").slice(0,6);
+  if(e.target.value.length===6)document.getElementById("f2").requestSubmit()});
+</script>
+</body>
+</html>

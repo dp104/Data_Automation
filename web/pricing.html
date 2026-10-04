@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pricing - Data Scraper</title>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link rel="icon" href="/favicon.ico" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/app.css">
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<style>.pricepage{max-width:1180px;margin:0 auto;padding:40px 20px 80px}</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="mark"><i class="ph ph-squares-four" style="font-size:18px"></i></div>
+  <div class="brand"><b>Data Scraper</b><span>Website to spreadsheet</span></div>
+  <div id="navarea" style="margin-left:auto"></div>
+</div></header>
+<main class="pricepage">
+  <div class="pricehead">
+    <h1>Simple, usage-friendly pricing</h1>
+    <p id="pricesub">Billed monthly in INR via Razorpay. Cancel any time.</p>
+  </div>
+  <div class="plans" id="plans"><div class="empty">Loading plans...</div></div>
+  <div class="trialnote" id="note"></div>
+</main>
+<div class="toasts" id="toasts"></div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money=(paise,cur)=>`${cur==="INR"?"₹":cur+" "}${(paise/100).toLocaleString()}`;
+let ME=null, PLANS=null;
+
+async function api(p,opt){try{const r=await fetch(p,opt);return {ok:r.ok,data:await r.json()}}catch(e){return{ok:false,data:{error:"offline"}}}}
+
+function toast(msg,kind){
+  const t=document.createElement("div"); t.className=`toast ${kind||"bad"}`;
+  t.innerHTML=`<i class="ph-fill ${kind==="ok"?"ph-check-circle":"ph-warning-circle"}"></i><span>${esc(msg)}</span>`;
+  $("toasts").appendChild(t); setTimeout(()=>t.remove(),5000);
+}
+
+function renderNav(){
+  if(ME && ME.user){
+    $("navarea").innerHTML=`<a class="navlink" href="/" style="margin-right:12px"><i class="ph ph-arrow-left"></i>Back to the app</a>
+      <button class="navlink" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')">Logout</button>`;
+  } else {
+    $("navarea").innerHTML=`<a class="navlink" href="/login" style="margin-right:12px">Sign in</a><a class="btn" href="/signup">Start free trial</a>`;
+  }
+}
+
+function planCard(id,p,featured){
+  const feats=p.features.map(f=>`<li><i class="ph-fill ph-check-circle"></i>${esc(f)}</li>`).join("");
+  return `<div class="plancard ${featured?"featured":""}">
+    ${featured?'<span class="ptag">Most popular</span>':""}
+    <h3>${esc(p.name)}</h3><p class="psub">${esc(p.tagline)}</p>
+    <div class="price">${money(p.price,p.currency)}<span>/month</span></div>
+    <ul class="pfeat">${feats}</ul>
+    <button class="btn" data-plan="${id}"><i class="ph ph-arrow-circle-right"></i>${ME&&ME.user?"Subscribe":"Start free trial"}</button>
+  </div>`;
+}
+
+async function subscribe(plan){
+  if(!ME || !ME.user){location.href="/signup";return}
+  const btn=document.querySelector(`button[data-plan="${plan}"]`);
+  const old=btn.innerHTML; btn.disabled=true; btn.innerHTML='<i class="ph ph-circle-notch" style="animation:rot .8s linear infinite"></i>Starting checkout...';
+  const {ok,data}=await api("/api/billing/create-order",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plan})});
+  if(!ok){toast(data.error||"Could not start checkout.");btn.disabled=false;btn.innerHTML=old;return}
+  const rz=new Razorpay({
+    key:data.key_id, amount:data.amount, currency:data.currency, order_id:data.order_id,
+    name:"Data Scraper", description:`${data.plan_name} plan`,
+    theme:{color:"#5b4fe8"},
+    handler: async function(resp){
+      const v=await api("/api/billing/verify",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({plan, order_id:resp.razorpay_order_id, payment_id:resp.razorpay_payment_id, signature:resp.razorpay_signature})});
+      if(!v.ok){toast(v.data.error||"Payment could not be verified.");btn.disabled=false;btn.innerHTML=old;return}
+      toast("Payment successful - your plan is now active.","ok");
+      setTimeout(()=>location.href="/",900);
+    },
+    modal:{ondismiss:()=>{btn.disabled=false;btn.innerHTML=old}}
+  });
+  rz.on("payment.failed", ()=>{btn.disabled=false;btn.innerHTML=old});
+  rz.open();
+  btn.disabled=false; btn.innerHTML=old;
+}
+
+async function load(){
+  const [me,plans]=await Promise.all([api("/api/auth/me"),api("/api/billing/plans")]);
+  ME=me.data; PLANS=plans.data; renderNav();
+  if(!plans.ok){$("plans").innerHTML='<div class="empty">Could not load plans.</div>';return}
+  $("plans").innerHTML=PLANS.order.map(id=>planCard(id,PLANS.plans[id],id==="pro")).join("");
+  const trialWord=PLANS.trial_days===1?"1-day":`${PLANS.trial_days}-day`;
+  $("pricesub").textContent=`Every plan starts with a free ${trialWord} trial. Billed monthly in INR via Razorpay. Cancel any time.`;
+  $("note").textContent=`Every new account gets a free ${trialWord} trial automatically - subscribe whenever you're ready.`;
+  document.querySelectorAll("button[data-plan]").forEach(b=>b.addEventListener("click",()=>subscribe(b.dataset.plan)));
+}
+load();
+</script>
+</body>
+</html>

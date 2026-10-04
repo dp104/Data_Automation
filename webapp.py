@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """Browser front-end for the university scraper.  Run:  ./uniscrape-web   then open http://localhost:8765
-Only listens on this computer (127.0.0.1)."""
-import contextlib
+Listens on 127.0.0.1 only unless UNISCRAPE_HOST is set (e.g. to 0.0.0.0 for a hosted deployment)."""
 import html
 import io
 import json
 import re
 import os
+import subprocess
+import sys
 import threading
 import time
 import types
+import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
+import auth
+import billing
+import notify
 import generic_engine
 import project_types
 import projects
@@ -23,18 +28,58 @@ from crawler import Fetcher, GenericCrawler
 from crawler import base_domain
 from extractor import LEVEL_ORDER, MONTHS
 
-PORT = int(os.environ.get("UNISCRAPE_PORT", "8765"))
 HERE = os.path.dirname(os.path.abspath(__file__))
+# Writable data (accounts, scans, saved formats/projects, exports, audit log) lives under
+# UNISCRAPE_DATA_DIR when set - point it at a mounted persistent disk in production (e.g. a Render
+# disk) since the app's own directory is wiped on every redeploy there. Defaults to this folder,
+# matching every previous version of the app.
+DATA_DIR = os.environ.get("UNISCRAPE_DATA_DIR") or HERE
+
+
+def _load_env_file(path):
+    """A tiny KEY=VALUE loader so `saas.env` works the same on Windows as team.env does on the
+    Mac (there sourced by team-start.sh) - never overrides a variable already set in the real
+    environment."""
+    if not os.path.isfile(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
+
+
+_load_env_file(os.path.join(HERE, "saas.env"))
+
+# Render (and most PaaS hosts) inject PORT and expect the app to bind 0.0.0.0; local use keeps the
+# old "this computer only" default so a plain ./uniscrape-web run is never exposed on the network.
+HOST = os.environ.get("UNISCRAPE_HOST", "127.0.0.1")
+PORT = int(os.environ.get("PORT") or os.environ.get("UNISCRAPE_PORT", "8765"))
 # Team mode: the tool sits behind Cloudflare Access or Tailscale, which sign people in with Google
 # Workspace and pass their identity in a header. Without a verified @ALLOWED_DOMAIN identity -> 403.
 TEAM = os.environ.get("UNISCRAPE_TEAM") == "1"
 AUTH = os.environ.get("UNISCRAPE_AUTH", "cloudflare")  # "cloudflare" or "tailscale": only that provider is trusted
+# The cloudflare path verifies a signed JWT. The tailscale path can only trust a plain request header
+# (Tailscale-User-Login) with NO signature of its own - that's safe only so long as `tailscale serve` is the
+# sole way anything ever reaches this port, since it strips any client-supplied copy of that header before
+# forwarding. Anyone who can reach this port directly (not through `tailscale serve`) could otherwise forge
+# that header and impersonate any @ALLOWED_DOMAIN user. Require an explicit, conscious opt-in before trusting
+# it at all, so this is a decision an operator makes on purpose rather than an assumption baked in silently.
+TRUST_TAILSCALE_HEADER = os.environ.get("UNISCRAPE_TRUST_TAILSCALE_HEADER") == "1"
 ALLOWED_DOMAIN = os.environ.get("UNISCRAPE_ALLOWED_DOMAIN", "flyurdream.com").lower()
 CF_TEAM = os.environ.get("CF_ACCESS_TEAM", "")  # e.g. flyurdream  ->  flyurdream.cloudflareaccess.com
 CF_AUD = os.environ.get("CF_ACCESS_AUD", "")    # Application Audience (AUD) tag from Cloudflare Access
-OUT_DIR = os.environ.get("UNISCRAPE_OUT") or (os.path.join(HERE, "outputs") if TEAM else os.path.expanduser("~/Downloads"))
-AUDIT = os.path.join(HERE, "logs", "audit.log")
+OUT_DIR = os.environ.get("UNISCRAPE_OUT") or \
+    (os.path.join(DATA_DIR, "outputs") if (TEAM or DATA_DIR != HERE) else os.path.expanduser("~/Downloads"))
+AUDIT = os.path.join(DATA_DIR, "logs", "audit.log")
 _jwks = None
+
+# SaaS admin/subscriber login (separate from the TEAM header-trust mode above). A verified TEAM
+# identity still gets full access with no separate account, as before; everyone else signs in here.
+ADMIN_EMAIL = os.environ.get("UNISCRAPE_ADMIN_EMAIL", "admin@example.com").strip().lower()
+ADMIN_PASSWORD = os.environ.get("UNISCRAPE_ADMIN_PASSWORD", "Admin@12345")
 
 
 def audit(user, action, **detail):
@@ -63,12 +108,60 @@ def identify(headers):
         except Exception:  # noqa: BLE001
             return None
     elif AUTH == "tailscale":  # `tailscale serve` sets this from the signed-in tailnet user and strips client copies
+        if not TRUST_TAILSCALE_HEADER:
+            return None  # the operator hasn't acknowledged the trust assumption - see TRUST_TAILSCALE_HEADER above
         email = headers.get("Tailscale-User-Login")
     if email and email.lower().endswith("@" + ALLOWED_DOMAIN):
         return email.lower()
     return None
+
+
+def nav_html(user):
+    """The top-bar account cluster substituted into <!--WHO--> on every tool page: who's signed
+    in, their plan/status, an Admin link for admins, and a sign-out button."""
+    if not user:
+        return ""
+    if user["role"] == "admin":
+        badge = '<span class="planpill plan-active"><i class="ph-fill ph-shield-check"></i>Admin</span>'
+    else:
+        sub = billing.get_subscription(user["id"])
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        if sub and sub["status"] == "trialing" and sub["trial_end"] and now <= sub["trial_end"]:
+            secs_left = max(0, time.mktime(time.strptime(sub["trial_end"], "%Y-%m-%d %H:%M:%S")) - time.time())
+            left = f"{max(1, int(secs_left / 3600))}h" if secs_left < 2 * 86400 else f"{int(secs_left / 86400)}d"
+            badge = f'<span class="planpill plan-trial"><i class="ph ph-hourglass"></i>Trial - {left} left</span>'
+        elif sub and sub["status"] == "active" and sub["period_end"] and now <= sub["period_end"]:
+            name = html.escape(billing.PLANS.get(sub["plan"], {}).get("name", sub["plan"] or ""))
+            badge = f'<span class="planpill plan-active"><i class="ph-fill ph-check-circle"></i>{name} - Active</span>'
+        else:
+            badge = '<span class="planpill plan-expired"><a href="/pricing">Choose a plan</a></span>'
+    admin_link = '<a class="navlink" href="/admin"><i class="ph ph-gauge"></i>Admin</a>' if user["role"] == "admin" else ""
+    email = html.escape(user["email"])
+    return (f'<div class="who">{badge}{admin_link}'
+            f'<span class="avatar">{html.escape(email[:1].upper())}</span><span class="who-email">{email}</span>'
+            f'<button type="button" class="navlink" onclick="fetch(\'/api/auth/logout\',{{method:\'POST\'}})'
+            f'.then(()=>location.href=\'/login\')">Logout</button></div>')
+
+
+OTP_ERRORS = {
+    "not_found": "We couldn't find a pending code for this account. Please request a new one.",
+    "expired": "This code has expired. Please request a new one.",
+    "too_many": "Too many incorrect attempts. Please request a new code.",
+    "invalid": "That code isn't right. Please check it and try again.",
+}
+
 JOBS = {}          # domain -> {"state", "log", "url", "started"}
-SCAN_LOCK = threading.Lock()
+
+_scan_locks = {}
+_scan_locks_guard = threading.Lock()
+
+
+def scan_lock(key):
+    """One lock per distinct scan target (a university domain, an any-site profile id, a project id) so
+    unrelated scans can run at the same time, while the same target still can never be scanned twice at
+    once. (Previously a single process-wide lock serialised every scan of every kind - see git history.)"""
+    with _scan_locks_guard:
+        return _scan_locks.setdefault(key, threading.Lock())
 
 
 class LogStream(io.TextIOBase):
@@ -83,17 +176,50 @@ class LogStream(io.TextIOBase):
         return len(s)
 
 
+class _JobStdoutRouter(io.TextIOBase):
+    """print() writes to one process-global stream, so naively doing contextlib.redirect_stdout(...) per
+    scan lets an unrelated request's print() (e.g. another thread's export-error log line) leak into
+    whichever job happens to be the active redirect target at that instant - harmless but very confusing
+    once more than one job can run at a time. Routing by the CURRENT THREAD instead keeps each job's log
+    to itself no matter how many scans run concurrently; a thread with nothing registered falls through
+    to the real stdout (the console), exactly like an unredirected print() always did."""
+
+    def __init__(self, real):
+        self._real = real
+        self._local = threading.local()
+
+    def route_to(self, stream):
+        self._local.target = stream
+
+    def stop_routing(self):
+        self._local.target = None
+
+    def write(self, s):
+        return (getattr(self._local, "target", None) or self._real).write(s)
+
+    def flush(self):
+        target = getattr(self._local, "target", None)
+        (target or self._real).flush()
+
+
+_stdout_router = _JobStdoutRouter(sys.stdout)
+sys.stdout = _stdout_router
+
+
 def cache_path(dom):
     return os.path.join(uniscrape.CACHE, f"{dom}.json")
 
 
 def run_scan(url, dom, job):
     args = types.SimpleNamespace(render="auto", delay=0.0, max_pages=8000, workers=10)
-    with SCAN_LOCK:  # one scan at a time (stdout is captured for the progress log)
+    with scan_lock(("university", dom)):
         job["state"] = "scanning"
         try:
-            with contextlib.redirect_stdout(LogStream(job)):
+            _stdout_router.route_to(LogStream(job))
+            try:
                 courses = uniscrape.scan(url, args)
+            finally:
+                _stdout_router.stop_routing()
             os.makedirs(uniscrape.CACHE, exist_ok=True)
             with open(cache_path(dom), "w") as f:
                 json.dump({"url": url, "scanned_at": time.strftime("%Y-%m-%d %H:%M"),
@@ -159,8 +285,24 @@ def recent_files():
     return out
 
 
+def complete_uni(uni, dom, data):
+    """Fill in any university field the caller left out or blank, so a missing field never crashes the
+    export - the same defaults the web form itself is pre-filled with (uniscrape.uni_defaults)."""
+    cfg_file = os.path.join(uniscrape.CONFIGS, f"{dom}.json")
+    try:
+        cfg = json.load(open(cfg_file)) if os.path.exists(cfg_file) else {}
+    except ValueError:
+        cfg = {}
+    defaults = uniscrape.uni_defaults(data.get("courses", []), dom, data.get("url") or f"https://{dom}/", data, cfg)
+    out = dict(defaults)
+    out.update({k: v for k, v in (uni or {}).items() if v not in (None, "")})
+    return out
+
+
 def export(req):
     dom = req["dom"]
+    if not os.path.exists(cache_path(dom)):
+        raise ValueError("Scan this website first.")
     data = load(dom)
     courses = data["courses"]
     if not req.get("incl_closed"):
@@ -171,7 +313,7 @@ def export(req):
     sheets, review = uniscrape.build_sheets(chosen, levels, req["modes"], order, bool(req.get("incl_pt")))
     if not sheets:
         return {"error": "No courses match that selection."}
-    uni = req["uni"]
+    uni = complete_uni(req.get("uni"), dom, data)
     for k in ("cost_of_living", "application_fee"):
         uni[k] = uniscrape.number(uni.get(k, 0))
     uni["deposit_pct"] = uniscrape.number(uni.get("deposit_pct", 0.34), 0.34)
@@ -205,12 +347,15 @@ def export_many(req):
     per_site = []
     for site in req["sites"]:
         dom = site["dom"]
-        courses = load(dom)["courses"]
+        if not os.path.exists(cache_path(dom)):
+            raise ValueError(f"{dom}: scan this website first.")
+        data = load(dom)
+        courses = data["courses"]
         if not req.get("incl_closed"):
             courses = [c for c in courses if not c.get("intl_closed")]
         chosen = [c for c in courses if c["level"] in levels]
         sheets, review = uniscrape.build_sheets(chosen, levels, req["modes"], req["intakes"], bool(req.get("incl_pt")))
-        uni = clean_uni(dict(site.get("uni") or {}))
+        uni = clean_uni(complete_uni(site.get("uni"), dom, data))
         uni["fixed"] = dict(site.get("fixed") or {})
         os.makedirs(uniscrape.CONFIGS, exist_ok=True)
         with open(os.path.join(uniscrape.CONFIGS, f"{dom}.json"), "w") as f:
@@ -246,7 +391,7 @@ def export_many(req):
 
 # ---------------------------------------------------------------- "Any website" mode
 ANY_JOBS = {}  # profile id -> {"state", "log", "rows", "fetched"}
-ANY_CACHE = os.path.join(HERE, "cache", "any")
+ANY_CACHE = os.path.join(DATA_DIR, "cache", "any")
 
 
 def any_cache(pid):
@@ -294,17 +439,20 @@ def any_scan(pid, start_url, max_pages):
         job["rows"] = rows
         return True
 
-    with SCAN_LOCK:
+    with scan_lock(("any", pid)):
         job["state"] = "scanning"
         fetcher = Fetcher()
         try:
-            with contextlib.redirect_stdout(LogStream(job)):
+            _stdout_router.route_to(LogStream(job))
+            try:
                 if fetcher.is_blocked(start_url):
                     print("   site blocks plain requests -> using headless Chrome for every page")
                     fetcher.browser_only = True
                 seeds = [e for e in prof.get("examples", [])]
                 crawler = GenericCrawler(start_url, fetcher, on_page, prof["pattern"], max_pages=max_pages, workers=8)
                 crawler.run(seeds)
+            finally:
+                _stdout_router.stop_routing()
             os.makedirs(ANY_CACHE, exist_ok=True)
             with open(any_cache(pid), "w") as f:
                 json.dump({"scanned_at": time.strftime("%Y-%m-%d %H:%M"), "rows": rows, "start_url": start_url}, f)
@@ -352,11 +500,14 @@ def any_export(req):
 # ---------------------------------------------------------------- typed projects
 def project_run(pid, max_pages):
     job = projects.JOBS[pid]
-    with SCAN_LOCK:
+    with scan_lock(("project", pid)):
         job["state"] = "scanning"
         try:
-            with contextlib.redirect_stdout(LogStream(job)):
+            _stdout_router.route_to(LogStream(job))
+            try:
                 rows, notes = projects.run(pid, max_pages=max_pages)
+            finally:
+                _stdout_router.stop_routing()
             job["notes"] = notes
             job["state"] = "done" if rows else "empty"
         except Exception as e:  # noqa: BLE001
@@ -376,7 +527,32 @@ def project_view(pid):
             "fields": [{"key": f["key"], "header": f["header"], "type": f["type"]} for f in t["fields"]]}
 
 
+_REDOS_PROBE_SRC = "import re,sys\ntry:\n re.compile(sys.argv[1]).search('a'*40+'!')\nexcept Exception:\n pass\n"
+
+
+def pattern_is_safe(pattern, budget=3.0):
+    """Best-effort ReDoS guard: reject a page-matching pattern that can't even finish a worst-case probe
+    match within `budget` seconds. Runs the probe in a disposable, dependency-free subprocess (not a
+    thread, and not multiprocessing.Process - both of those would re-import this whole module with its
+    heavy dependencies, which is slow enough on its own to cause false positives) so a catastrophically-
+    backtracking regex can be killed outright instead of hanging a worker thread forever. Fails OPEN
+    (treats the pattern as safe) if the probe itself can't run, so an environment where subprocesses
+    can't be spawned never loses the save feature over this."""
+    try:
+        subprocess.run([sys.executable, "-c", _REDOS_PROBE_SRC, pattern], timeout=budget,
+                       capture_output=True, check=False)
+        return True
+    except subprocess.TimeoutExpired:
+        return False
+    except Exception:  # noqa: BLE001
+        return True
+
+
 class Handler(BaseHTTPRequestHandler):
+    # Without this, a request that claims a large Content-Length but sends its body slowly (or not at all)
+    # would make self.rfile.read(n) block that worker thread forever. 30s is generous for a local request.
+    timeout = 30
+
     def log_message(self, *a):
         pass
 
@@ -390,28 +566,96 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b)
 
-    def gate(self):
-        self.user = identify(self.headers)
-        if self.user is None:
-            self.send(403, "Access denied: sign in to Tailscale with your work Google account.", "text/plain")
+    def resolve_user(self):
+        """The account behind this request: a verified TEAM header identity (treated as a staff
+        admin with no separate signup needed), or the SaaS session cookie's account, or None."""
+        staff_email = identify(self.headers)
+        if TEAM and staff_email:
+            return {"id": f"staff:{staff_email}", "email": staff_email, "role": "admin", "name": staff_email}
+        return auth.user_from_cookie(self.headers.get("Cookie"))
+
+    def require(self, level):
+        """'public': no login needed. 'auth': any signed-in account. 'member': signed-in and
+        (admin, or an active/trialing subscription). 'admin': signed-in admin only.
+        Sends the right redirect/error and returns False when access is refused."""
+        self.auth_user = self.resolve_user()
+        self.user = self.auth_user["email"] if self.auth_user else None
+        if level == "public":
+            return True
+        if not self.auth_user:
+            if self.command == "GET":
+                self.send(302, "", "text/plain", {"Location": "/login?next=" + quote(self.path, safe="")})
+            else:
+                self.send(401, {"error": "Please sign in."})
+            return False
+        if level == "admin" and self.auth_user["role"] != "admin":
+            self.send(403, {"error": "Admin access only."})
+            return False
+        if level == "member" and not billing.has_access(self.auth_user):
+            if self.command == "GET":
+                self.send(302, "", "text/plain", {"Location": "/pricing"})
+            else:
+                self.send(402, {"error": "Your trial or subscription has ended. Please choose a plan to continue."})
             return False
         return True
 
+    PUBLIC_GET = {"/login", "/signup", "/forgot-password", "/pricing", "/app.css", "/favicon.ico",
+                  "/api/auth/me", "/api/billing/plans", "/healthz"}
+    PUBLIC_POST = {"/api/auth/login", "/api/auth/signup", "/api/auth/verify-signup-otp", "/api/auth/resend-otp",
+                   "/api/auth/forgot-password", "/api/auth/reset-password"}
+    ADMIN_PATHS = {"/admin", "/api/admin/stats"}
+    AUTH_ONLY_PATHS = {"/api/auth/logout", "/api/billing/create-order", "/api/billing/verify"}
+
+    def level_for(self, path):
+        if path in self.PUBLIC_GET or path in self.PUBLIC_POST:
+            return "public"
+        if path in self.ADMIN_PATHS:
+            return "admin"
+        if path in self.AUTH_ONLY_PATHS:
+            return "auth"
+        return "member"
+
+    def render_page(self, page_name):
+        who = nav_html(self.auth_user)
+        with open(os.path.join(HERE, "web", page_name), encoding="utf-8") as f:
+            page = f.read()
+        return self.send(200, page.replace("<!--WHO-->", who), "text/html; charset=utf-8")
+
     def do_GET(self):
-        if not self.gate():
-            return
         u = urlparse(self.path)
+        if not self.require(self.level_for(u.path)):
+            return
+        if u.path == "/healthz":
+            return self.send(200, "ok", "text/plain")
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         if u.path in ("/", "/project", "/university"):
             page_name = {"/": "home.html", "/project": "project.html", "/university": "index.html"}[u.path]
-            who = "" if self.user == "local" else \
-                f'<div class="who"><span class="avatar">{html.escape(self.user[:1].upper())}</span>{html.escape(self.user)}</div>'
-            with open(os.path.join(HERE, "web", page_name), encoding="utf-8") as f:
-                page = f.read()
-            return self.send(200, page.replace("<!--WHO-->", who), "text/html; charset=utf-8")
+            return self.render_page(page_name)
+        if u.path == "/login":
+            return self.render_page("login.html")
+        if u.path == "/signup":
+            return self.render_page("signup.html")
+        if u.path == "/forgot-password":
+            return self.render_page("forgot-password.html")
+        if u.path == "/pricing":
+            return self.render_page("pricing.html")
+        if u.path == "/admin":
+            return self.render_page("admin.html")
+        if u.path == "/api/auth/me":
+            if not self.auth_user:
+                return self.send(200, {"user": None})
+            sub = billing.get_subscription(self.auth_user["id"])
+            return self.send(200, {"user": {"email": self.auth_user["email"], "name": self.auth_user.get("name"),
+                                            "role": self.auth_user["role"]},
+                                   "subscription": sub, "access": billing.has_access(self.auth_user)})
+        if u.path == "/api/admin/stats":
+            return self.send(200, billing.admin_stats())
+        if u.path == "/api/billing/plans":
+            return self.send(200, {"order": billing.PLAN_ORDER, "plans": billing.PLANS,
+                                   "trial_days": billing.TRIAL_DAYS, "key_id": billing.RAZORPAY_KEY_ID})
         if u.path == "/api/owner":  # who to contact for a new kind of project (configs/owner.json)
             try:
-                o = json.load(open(os.path.join(HERE, "configs", "owner.json")))
+                o = json.load(open(os.path.join(DATA_DIR, "configs", "owner.json")))
             except (OSError, ValueError):
                 o = {}
             return self.send(200, {"name": str(o.get("name", "")), "email": str(o.get("email", ""))})
@@ -438,12 +682,16 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/app.css":
             with open(os.path.join(HERE, "web", "app.css"), "rb") as f:
                 return self.send(200, f.read(), "text/css; charset=utf-8", {"Cache-Control": "no-cache"})
+        if u.path == "/favicon.ico":
+            svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+                   '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+                   '<stop offset="0" stop-color="#5b4fe8"/><stop offset="1" stop-color="#13b0a6"/></linearGradient></defs>'
+                   '<rect width="32" height="32" rx="8" fill="url(#g)"/>'
+                   '<text x="16" y="23" font-family="Arial,Helvetica,sans-serif" font-size="17" '
+                   'font-weight="700" fill="#ffffff" text-anchor="middle">D</text></svg>')
+            return self.send(200, svg, "image/svg+xml", {"Cache-Control": "public, max-age=604800"})
         if u.path in ("/any", "/any/"):
-            who = "" if self.user == "local" else \
-                f'<div class="who"><span class="avatar">{html.escape(self.user[:1].upper())}</span>{html.escape(self.user)}</div>'
-            with open(os.path.join(HERE, "web", "any.html"), encoding="utf-8") as f:
-                page = f.read()
-            return self.send(200, page.replace("<!--WHO-->", who), "text/html; charset=utf-8")
+            return self.render_page("any.html")
         if u.path == "/api/any/profiles":
             return self.send(200, generic_engine.list_profiles())
         if u.path == "/api/any/profile":
@@ -495,13 +743,114 @@ class Handler(BaseHTTPRequestHandler):
         self.send(404, {"error": "not found"})
 
     def do_POST(self):
-        if not self.gate():
+        if not self.require(self.level_for(self.path)):
             return
         n = int(self.headers.get("Content-Length", 0))
         try:
             req = json.loads(self.rfile.read(n) or b"{}")
         except ValueError:
             return self.send(400, {"error": "bad request"})
+        if self.path == "/api/auth/signup":
+            try:
+                u = auth.create_user(req.get("email", ""), req.get("password", ""), req.get("name", ""), verified=False)
+            except ValueError as e:
+                return self.send(400, {"error": str(e)})
+            otp = auth.create_verification(u["email"], "signup")
+            notify.send_email(u["email"], "Verify your Data Scraper account", notify.otp_email_body(otp, "signup"))
+            audit(u["email"], "signup_pending")
+            resp = {"ok": True, "stage": "otp", "email": u["email"]}
+            if not notify.EMAIL_CONFIGURED:
+                resp["dev_otp"] = otp
+            return self.send(200, resp)
+        if self.path == "/api/auth/verify-signup-otp":
+            email = auth.normalize_email(req.get("email", ""))
+            result = auth.check_verification(email, "signup", req.get("otp", ""))
+            if result != "ok":
+                return self.send(400, {"error": OTP_ERRORS[result]})
+            u = auth.get_user_by_email(email)
+            if not u:
+                return self.send(400, {"error": "Account not found. Please sign up again."})
+            auth.mark_verified(u["id"])
+            auth.consume_verification(email, "signup")
+            billing.start_trial(u["id"])
+            token = auth.create_session(u["id"])
+            audit(email, "signup_verified")
+            return self.send(200, {"ok": True}, headers={"Set-Cookie": auth.session_cookie_header(token)})
+        if self.path == "/api/auth/resend-otp":
+            email = auth.normalize_email(req.get("email", ""))
+            purpose = req.get("purpose") if req.get("purpose") in ("signup", "reset") else "signup"
+            u = auth.get_user_by_email(email)
+            if purpose == "signup" and (not u or u["verified"]):
+                return self.send(400, {"error": "Nothing to verify for this account."})
+            try:
+                otp = auth.create_verification(email, purpose, resend=True)
+            except ValueError as e:
+                return self.send(429, {"error": str(e)})
+            if u:
+                notify.send_email(email, "Your verification code", notify.otp_email_body(otp, purpose))
+            resp = {"ok": True}
+            if not notify.EMAIL_CONFIGURED and u:
+                resp["dev_otp"] = otp
+            return self.send(200, resp)
+        if self.path == "/api/auth/login":
+            u = auth.authenticate(req.get("email", ""), req.get("password", ""))
+            if not u:
+                return self.send(400, {"error": "Incorrect email or password."})
+            if not u["verified"]:
+                otp = auth.create_verification(u["email"], "signup")
+                notify.send_email(u["email"], "Verify your Data Scraper account", notify.otp_email_body(otp, "signup"))
+                resp = {"error": "Please verify your email first - we've sent a new code.",
+                        "needs_verification": True, "email": u["email"]}
+                if not notify.EMAIL_CONFIGURED:
+                    resp["dev_otp"] = otp
+                return self.send(403, resp)
+            token = auth.create_session(u["id"])
+            audit(u["email"], "login")
+            return self.send(200, {"ok": True, "role": u["role"]}, headers={"Set-Cookie": auth.session_cookie_header(token)})
+        if self.path == "/api/auth/logout":
+            token = auth.session_token_from_headers(self.headers)
+            if token:
+                auth.destroy_session(token)
+            return self.send(200, {"ok": True}, headers={"Set-Cookie": auth.clear_cookie_header()})
+        if self.path == "/api/auth/forgot-password":
+            email = auth.normalize_email(req.get("email", ""))
+            u = auth.get_user_by_email(email)
+            resp = {"ok": True}  # always "ok" - never reveal whether an account exists
+            if u:
+                otp = auth.create_verification(email, "reset")
+                notify.send_email(email, "Reset your Data Scraper password", notify.otp_email_body(otp, "reset"))
+                audit(email, "password_reset_requested")
+                if not notify.EMAIL_CONFIGURED:
+                    resp["dev_otp"] = otp
+            return self.send(200, resp)
+        if self.path == "/api/auth/reset-password":
+            email = auth.normalize_email(req.get("email", ""))
+            result = auth.check_verification(email, "reset", req.get("otp", ""))
+            if result != "ok":
+                return self.send(400, {"error": OTP_ERRORS[result]})
+            u = auth.get_user_by_email(email)
+            if not u:
+                return self.send(400, {"error": "Account not found."})
+            try:
+                auth.set_password(u["id"], req.get("new_password", ""))
+            except ValueError as e:
+                return self.send(400, {"error": str(e)})
+            auth.consume_verification(email, "reset")
+            audit(email, "password_reset")
+            return self.send(200, {"ok": True})
+        if self.path == "/api/billing/create-order":
+            try:
+                return self.send(200, billing.create_order(self.auth_user["id"], req.get("plan", "")))
+            except (ValueError, RuntimeError) as e:
+                return self.send(400, {"error": str(e)})
+        if self.path == "/api/billing/verify":
+            try:
+                sub = billing.verify_payment(self.auth_user["id"], req.get("plan", ""), req.get("order_id", ""),
+                                             req.get("payment_id", ""), req.get("signature", ""))
+            except (ValueError, KeyError) as e:
+                return self.send(400, {"error": str(e)})
+            audit(self.auth_user["email"], "payment", plan=sub["plan"], amount=sub["amount"])
+            return self.send(200, {"ok": True, "subscription": sub})
         if self.path == "/api/scan":
             url = (req.get("url") or "").strip()
             if not url:
@@ -510,16 +859,15 @@ class Handler(BaseHTTPRequestHandler):
                 url = "https://" + url
             dom = base_domain(urlparse(url).netloc)
             job = JOBS.get(dom)
-            if job and job["state"] == "scanning":
+            if job and job["state"] in ("scanning", "queued"):
                 return self.send(200, {"dom": dom})
             JOBS[dom] = job = {"state": "queued", "log": [], "url": url}
             audit(self.user, "scan", url=url, rescan=bool(req.get("rescan")))
+            billing.log_usage(self.auth_user["id"], "scan", url)
             if os.path.exists(cache_path(dom)) and not req.get("rescan"):
                 job["state"] = "done"
                 job["log"].append(f"Using saved scan from {load(dom)['scanned_at']} (tick 'Scan again' for fresh data)")
             else:
-                if SCAN_LOCK.locked():
-                    job["log"].append("Waiting for another scan to finish...")
                 threading.Thread(target=run_scan, args=(url, dom, job), daemon=True).start()
             return self.send(200, {"dom": dom})
         if self.path == "/api/template/learn":  # body: {name, filename, data (base64 .xlsx)}
@@ -571,7 +919,22 @@ class Handler(BaseHTTPRequestHandler):
             if not sites:
                 return self.send(400, {"error": "Add at least one website link."})
             name = (req.get("name") or t["name"]).strip()[:80]
-            pid = req.get("id") or projects.pid_of(f"{t['id']}-{name}")
+            pid = req.get("id")
+            if not pid:
+                # a brand new project: atomically claim a unique id so two people (or two tabs) creating
+                # a same-named project at the same moment can never silently overwrite one another
+                base = projects.pid_of(f"{t['id']}-{name}")
+                os.makedirs(projects.PROJECTS, exist_ok=True)
+                pid = base
+                for attempt in range(6):
+                    try:
+                        fd = os.open(os.path.join(projects.PROJECTS, f"{pid}.json"), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                        os.close(fd)
+                        break
+                    except FileExistsError:
+                        pid = f"{base}-{uuid.uuid4().hex[:6]}"
+                else:
+                    return self.send(409, {"error": "Could not claim a unique project id. Try again."})
             fmt = req.get("format") or "standard"
             p = {"id": pid, "name": name, "type": t["id"], "sites": sites[:20], "format": fmt,
                  "mapping": req.get("mapping") if fmt != "standard" else None, "created": time.strftime("%Y-%m-%d")}
@@ -590,6 +953,7 @@ class Handler(BaseHTTPRequestHandler):
             projects.JOBS[pid] = {"state": "queued", "log": [], "count": 0, "notes": []}
             maxp = max(20, min(int(req.get("max_pages") or 1500), 8000))
             audit(self.user, "project_run", project=pid, max_pages=maxp)
+            billing.log_usage(self.auth_user["id"], "project_run", pid)
             threading.Thread(target=project_run, args=(pid, maxp), daemon=True).start()
             return self.send(200, {"ok": True})
         if self.path == "/api/project/export":
@@ -598,6 +962,7 @@ class Handler(BaseHTTPRequestHandler):
                 os.makedirs(OUT_DIR, exist_ok=True)
                 res = projects.export(p, OUT_DIR, req.get("fixed") or {})
                 audit(self.user, "project_export", project=p["id"], file=res["xlsx"], rows=res["rows"])
+                billing.log_usage(self.auth_user["id"], "project_export", p["id"])
                 return self.send(200, res)
             except ValueError as e:
                 return self.send(400, {"error": str(e)})
@@ -620,8 +985,21 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"any learn failed for {self.user}: {e!r}", flush=True)
                 return self.send(400, {"error": "Could not read the example pages. Check the links open in a browser."})
         if self.path == "/api/any/save":
-            t = template_engine.load(req["template"])
-            dom = str(req.get("domain", "")).lower()
+            if not req.get("template"):
+                return self.send(400, {"error": "Choose an output format first."})
+            try:
+                t = template_engine.load(req["template"])
+            except (OSError, ValueError, KeyError):
+                return self.send(404, {"error": "That output format no longer exists. Choose it again."})
+            dom = str(req.get("domain", "")).strip().lower()
+            if not dom:
+                return self.send(400, {"error": "A website is required."})
+            try:
+                re.compile(req.get("pattern") or ".*")
+            except re.error:
+                return self.send(400, {"error": "The page pattern is not valid."})
+            if not pattern_is_safe(req.get("pattern") or ".*"):
+                return self.send(400, {"error": "That page pattern is too complex and could hang the crawler. Try a simpler one."})
             pid = generic_engine.profile_id(t["id"], dom)
             cols = []
             for c in t["columns"]:
@@ -631,15 +1009,15 @@ class Handler(BaseHTTPRequestHandler):
                     rule = None
                 cols.append({"header": c["header"], "rule": rule, "sample": got.get("sample", ""), "typed": bool(got.get("typed")),
                              "default": str(got.get("default", ""))[:300]})
-            try:
-                re.compile(req.get("pattern") or ".*")
-            except re.error:
-                return self.send(400, {"error": "The page pattern is not valid."})
             prof = {"id": pid, "name": f"{dom} ({t['name']})", "template": t["id"], "domain": dom,
                     "pattern": req.get("pattern") or ".*", "columns": cols,
                     "examples": [e for e in req.get("examples", []) if str(e).startswith("http")][:5],
                     "created": time.strftime("%Y-%m-%d")}
-            generic_engine.save_profile(prof)
+            try:
+                generic_engine.save_profile(prof)
+            except Exception as e:  # noqa: BLE001
+                print(f"any save failed for {self.user}: {e!r}", flush=True)
+                return self.send(500, {"error": "Could not save the site setup. Please try again."})
             audit(self.user, "any_save", profile=pid)
             return self.send(200, {"ok": True, "id": pid})
         if self.path == "/api/any/scan":
@@ -661,12 +1039,14 @@ class Handler(BaseHTTPRequestHandler):
             ANY_JOBS[pid] = {"state": "queued", "log": [], "rows": []}
             maxp = max(20, min(int(req.get("max_pages") or 2000), 8000))
             audit(self.user, "any_scan", profile=pid, start=start, max_pages=maxp)
+            billing.log_usage(self.auth_user["id"], "any_scan", pid)
             threading.Thread(target=any_scan, args=(pid, start, maxp), daemon=True).start()
             return self.send(200, {"ok": True})
         if self.path == "/api/any/export":
             try:
                 res = any_export(req)
                 audit(self.user, "any_export", profile=req.get("profile"), file=res["xlsx"], rows=res["rows"])
+                billing.log_usage(self.auth_user["id"], "any_export", req.get("profile") or "")
                 return self.send(200, res)
             except Exception as e:  # noqa: BLE001
                 print(f"any export failed for {self.user}: {e!r}", flush=True)
@@ -677,7 +1057,10 @@ class Handler(BaseHTTPRequestHandler):
                 audit(self.user, "export", format=req.get("template"), sites=[x.get("dom") for x in req.get("sites", [])],
                       combined=bool(req.get("combined")), files=[f.get("xlsx") for f in res.get("files", [])],
                       levels=req.get("levels"), intakes=req.get("intakes"))
+                billing.log_usage(self.auth_user["id"], "export_many", "")
                 return self.send(200, res)
+            except ValueError as e:
+                return self.send(400, {"error": str(e)})
             except Exception as e:  # noqa: BLE001
                 print(f"export failed for {self.user}: {e!r}", flush=True)
                 return self.send(500, {"error": "Could not create the Excel file. Please try again or tell the admin."})
@@ -687,7 +1070,10 @@ class Handler(BaseHTTPRequestHandler):
                 audit(self.user, "export", dom=req.get("dom"), file=res.get("xlsx"), format=req.get("template"),
                       levels=req.get("levels"),
                       intakes=req.get("intakes"))
+                billing.log_usage(self.auth_user["id"], "export", req.get("dom") or "")
                 return self.send(200, res)
+            except ValueError as e:
+                return self.send(400, {"error": str(e)})
             except Exception as e:  # noqa: BLE001
                 # full detail for the admin log only; users never see server paths
                 print(f"export failed for {self.user}: {e!r}", flush=True)
@@ -699,12 +1085,38 @@ PAGE_FILE = os.path.join(HERE, "web", "index.html")
 
 
 def main():
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    template_engine.seed_standard_format()
+    created = auth.ensure_admin(ADMIN_EMAIL, ADMIN_PASSWORD)
+    srv = ThreadingHTTPServer((HOST, PORT), Handler)
     link = f"http://localhost:{PORT}"
-    print(f"University Course Scraper is running:  {link}\n(keep this window open; close it to stop the tool)")
+    if HOST == "127.0.0.1":
+        print(f"Data Scraper SaaS is running:  {link}\n(keep this window open; close it to stop the tool)")
+    else:
+        print(f"Data Scraper SaaS is running on {HOST}:{PORT}")
+    if DATA_DIR != HERE:
+        print(f"Data directory: {DATA_DIR} (set via UNISCRAPE_DATA_DIR)")
+    if created:
+        print(f"Admin account ready -> {ADMIN_EMAIL} / {ADMIN_PASSWORD}  (set UNISCRAPE_ADMIN_EMAIL / "
+              "UNISCRAPE_ADMIN_PASSWORD in saas.env to change this; do that before any real deployment).")
+    if billing.RAZORPAY_KEY_ID.startswith("rzp_test_SAMPLEKEYID"):
+        print("Razorpay is on SAMPLE placeholder keys - payments will show a clear error until you set real "
+              "RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET (test or live) in saas.env. Everything else (signup, "
+              "login, trial, admin dashboard) works right now.")
     if TEAM:
         print(f"TEAM MODE: only verified @{ALLOWED_DOMAIN} users; files in {OUT_DIR}; audit log {AUDIT}")
-    if not os.environ.get("UNISCRAPE_NO_BROWSER") and not TEAM:
+        if AUTH == "tailscale":
+            if TRUST_TAILSCALE_HEADER:
+                print("WARNING: UNISCRAPE_AUTH=tailscale trusts the 'Tailscale-User-Login' header with no "
+                      "signature check of its own. This is safe ONLY if `tailscale serve` is the sole way "
+                      "anything ever reaches this port - if this port is ever reachable another way (a stray "
+                      "port-forward, another local process, binding beyond 127.0.0.1), anyone could forge that "
+                      f"header and impersonate any @{ALLOWED_DOMAIN} user. Prefer UNISCRAPE_AUTH=cloudflare "
+                      "(a verified JWT) if you can. See TEAM_SETUP.md.")
+            else:
+                print("UNISCRAPE_AUTH=tailscale is set but UNISCRAPE_TRUST_TAILSCALE_HEADER=1 was not, so every "
+                      "request will be refused (403) until you set it - that variable is your acknowledgement "
+                      "that trust depends entirely on `tailscale serve` being the only path to this port.")
+    if not os.environ.get("UNISCRAPE_NO_BROWSER") and not TEAM and HOST == "127.0.0.1":
         threading.Timer(1.0, lambda: webbrowser.open(link)).start()
     try:
         srv.serve_forever()

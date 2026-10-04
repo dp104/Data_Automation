@@ -851,7 +851,10 @@ def extract(url, html):
     for d in lds:
         for inst in (d.get("hasCourseInstance") or []) if isinstance(d.get("hasCourseInstance"), list) else [d.get("hasCourseInstance")]:
             if isinstance(inst, dict) and inst.get("startDate"):
-                intakes += months_in(re.sub(r"\d{4}-(\d{2})-\d{2}", lambda m: MONTHS[int(m.group(1)) - 1], str(inst["startDate"])))
+                intakes += months_in(re.sub(
+                    r"\d{4}-(\d{2})-\d{2}",
+                    lambda m: MONTHS[int(m.group(1)) - 1] if 1 <= int(m.group(1)) <= 12 else m.group(0),
+                    str(inst["startDate"])))
     for v in vals["intake"]:
         intakes += months_in(v, numeric=True)
     if not intakes:

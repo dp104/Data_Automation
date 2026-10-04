@@ -1,0 +1,41 @@
+# Render Blueprint - lets you deploy this whole app with "New +" -> "Blueprint" in the Render
+# dashboard, pointed at this repo. Render auto-detects this file. Fill in the "sync: false"
+# values in the dashboard after the first deploy (see README / deployment notes for what each is).
+services:
+  - type: web
+    name: data-scraper
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter          # free plan has no persistent disk - see the disk note below
+    healthCheckPath: /healthz
+    envVars:
+      - key: UNISCRAPE_DATA_DIR
+        value: /var/data
+      - key: UNISCRAPE_HOST
+        value: 0.0.0.0
+      - key: UNISCRAPE_SECURE_COOKIES
+        value: "1"
+      - key: UNISCRAPE_TRIAL_DAYS
+        value: "1"
+      - key: UNISCRAPE_ADMIN_EMAIL
+        sync: false
+      - key: UNISCRAPE_ADMIN_PASSWORD
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1

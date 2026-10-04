@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin - Data Scraper</title>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link rel="icon" href="/favicon.ico" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/app.css">
+<style>.adminpage{max-width:1180px;margin:0 auto;padding:30px 20px 80px}
+.adminhead{display:flex;align-items:baseline;gap:12px;margin-bottom:22px}.adminhead h1{font-size:26px;margin:0;letter-spacing:-.02em}
+.adminhead span{color:var(--ink-3);font-size:13.5px}
+.tablecard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:6px 20px 14px;overflow:auto}
+.tablecard h4{margin:16px 0 10px;font-size:14px}</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="mark"><i class="ph ph-squares-four" style="font-size:18px"></i></div>
+  <div class="brand"><b>Data Scraper</b><span>Admin dashboard</span></div>
+  <nav class="modes"><a href="/"><i class="ph ph-arrow-left"></i><span>Back to app</span></a></nav>
+  <!--WHO-->
+</div></header>
+<main class="adminpage">
+  <div class="adminhead"><h1>Admin dashboard</h1><span id="asof"></span></div>
+
+  <div class="admingrid" id="tiles"><div class="empty">Loading...</div></div>
+
+  <div class="charts">
+    <div class="chartcard"><h4>New signups - last 14 days</h4><div id="chart-signups"></div></div>
+    <div class="chartcard"><h4>Scans / exports run - last 14 days</h4><div id="chart-usage"></div></div>
+  </div>
+
+  <div class="tablecard">
+    <h4>Subscribers</h4>
+    <div style="overflow:auto">
+      <table class="admin" id="subtable">
+        <thead><tr><th>Email</th><th>Name</th><th>Plan</th><th>Status</th><th>Expires</th><th>Joined</th><th>Last login</th></tr></thead>
+        <tbody id="subrows"><tr><td colspan="7" class="empty">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money=p=>`₹${(p/100).toLocaleString(undefined,{maximumFractionDigits:0})}`;
+const STATUS_LABEL={active:"Active",trialing:"Trialing",past_due:"Past due",none:"No plan"};
+
+function barsSvg(rows){
+  const max=Math.max(1,...rows.map(r=>r.count));
+  const w=rows.length*22, h=60, bw=14;
+  const bars=rows.map((r,i)=>{
+    const bh=Math.max(2,Math.round((r.count/max)*44));
+    const x=i*22, y=h-14-bh;
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="3"><title>${esc(r.day)}: ${r.count}</title></rect>`;
+  }).join("");
+  const firstDay=rows[0]?.day.slice(5)||"", lastDay=rows[rows.length-1]?.day.slice(5)||"";
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Daily counts, ${firstDay} to ${lastDay}">
+    <line x1="0" y1="${h-12}" x2="${w}" y2="${h-12}" stroke="var(--line)" stroke-width="1"/>
+    ${bars}
+    <text class="ax" x="0" y="${h-1}">${firstDay}</text>
+    <text class="ax" x="${w}" y="${h-1}" text-anchor="end">${lastDay}</text>
+  </svg>`;
+}
+
+function tile(label,icon,value,sub){
+  return `<div class="stat2"><div class="lbl"><i class="ph ${icon}"></i>${label}</div><b>${value}</b>${sub?`<div class="sub">${sub}</div>`:""}</div>`;
+}
+
+async function load(){
+  const r=await fetch("/api/admin/stats");
+  if(!r.ok){$("tiles").innerHTML='<div class="empty">Could not load (admin access only).</div>';return}
+  const d=await r.json();
+  $("asof").textContent=`${d.total_users} account${d.total_users===1?"":"s"} total`;
+  const c=d.status_counts;
+  $("tiles").innerHTML=[
+    tile("Total subscribers","ph-users",d.total_subscribers,`${d.admins} admin${d.admins===1?"":"s"}`),
+    tile("Active subscriptions","ph-check-circle",c.active||0,"paying right now"),
+    tile("On trial","ph-hourglass",c.trialing||0,"within their free trial"),
+    tile("Revenue to date","ph-currency-circle-dollar",money(d.revenue_paise),`${d.payment_count} payment${d.payment_count===1?"":"s"} - MRR ${money(d.mrr_paise)}`),
+  ].join("");
+  $("chart-signups").innerHTML=barsSvg(d.signups_by_day);
+  $("chart-usage").innerHTML=barsSvg(d.usage_by_day);
+  $("subrows").innerHTML=d.subscribers.length?d.subscribers.map(s=>`<tr>
+      <td>${esc(s.email)}</td><td>${esc(s.name||"-")}</td><td>${esc(s.plan||"-")}</td>
+      <td><span class="badge ${esc(s.status)}">${esc(STATUS_LABEL[s.status]||s.status)}</span></td>
+      <td>${esc((s.expires||"").slice(0,16).replace("T"," ")||"-")}</td>
+      <td>${esc((s.created_at||"").slice(0,10))}</td>
+      <td>${esc((s.last_login||"").slice(0,16).replace("T"," ")||"Never")}</td>
+    </tr>`).join(""):'<tr><td colspan="7" class="empty">No subscribers yet.</td></tr>';
+}
+load();
+</script>
+</body>
+</html>

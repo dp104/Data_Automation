@@ -4,6 +4,9 @@ __pycache__/
 *.pyc
 .DS_Store
 
+# Razorpay keys + admin bootstrap password - never commit real values
+saas.env
+
 # team data and run results (kept on the host, not in Git)
 cache/
 outputs/

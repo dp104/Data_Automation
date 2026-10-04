@@ -314,7 +314,7 @@ def same_host(url, root_host):
 class Crawler:
     """Priority crawl: course-looking URLs first; general pages only near the top of the site."""
 
-    def __init__(self, root, fetcher, on_page, max_pages=4000, workers=10, log=print):
+    def __init__(self, root, fetcher, on_page, max_pages=4000, workers=10, log=print, item_label="course pages"):
         self.root = normalise(root)
         self.root_host = urlparse(self.root).netloc
         self.dom = base_domain(self.root_host)
@@ -324,6 +324,7 @@ class Crawler:
         self.max_pages = max_pages
         self.workers = workers
         self.log = log
+        self.item_label = item_label  # what on_page's "found" pages are called, for the progress log
         self.seen = set()
         self.heap = []
         self.fetched = 0
@@ -401,7 +402,7 @@ class Crawler:
                     submitted += 1
                 if not inflight:
                     if self.heap and self.fetched - last_course_at > 300:
-                        self.log("   no new course pages in the last 300 pages - stopping early")
+                        self.log(f"   no new {self.item_label} in the last 300 pages - stopping early")
                     break
                 done, _ = wait(list(inflight), return_when=FIRST_COMPLETED)
                 for f in done:
@@ -422,8 +423,8 @@ class Crawler:
                         self.push(l, d + 1)
                 if time.time() - last_log > 10:
                     last_log = time.time()
-                    self.log(f"   crawled {self.fetched} pages | queue {len(self.heap)} | course pages {course_pages}")
-        self.log(f"   crawl finished: {self.fetched} pages fetched ({failed} failed), {course_pages} course pages found")
+                    self.log(f"   crawled {self.fetched} pages | queue {len(self.heap)} | {self.item_label} {course_pages}")
+        self.log(f"   crawl finished: {self.fetched} pages fetched ({failed} failed), {course_pages} {self.item_label} found")
 
 
 GENERIC_SKIP = re.compile(r"(/login|/signin|/sign-in|/logout|/register|/cart|/basket|/checkout|/account|/my-account|/wishlist|"
@@ -436,7 +437,7 @@ class GenericCrawler(Crawler):
     Listing pages that lead to them (same first path segment, pagination) are followed first."""
 
     def __init__(self, root, fetcher, on_page, pattern, max_pages=3000, workers=8, log=print):
-        super().__init__(root, fetcher, on_page, max_pages=max_pages, workers=workers, log=log)
+        super().__init__(root, fetcher, on_page, max_pages=max_pages, workers=workers, log=log, item_label="matching pages")
         self.pattern = re.compile(pattern)
         first = re.match(r"\^/([^/\[\\(]+)", pattern)
         self.section = "/" + first.group(1).replace("\\", "") if first else None
@@ -488,8 +489,8 @@ class TypeCrawler(Crawler):
     """Crawl for one project type: listing pages -> result cards -> each item's own page.
     Honours robots.txt; prefers links that look like items already found and 'next page' links."""
 
-    def __init__(self, root, fetcher, on_page, max_pages=2000, workers=4, log=print, robots=None):
-        super().__init__(root, _PoliteFetch(fetcher), on_page, max_pages=max_pages, workers=workers, log=log)
+    def __init__(self, root, fetcher, on_page, max_pages=2000, workers=4, log=print, robots=None, item_label="items"):
+        super().__init__(root, _PoliteFetch(fetcher), on_page, max_pages=max_pages, workers=workers, log=log, item_label=item_label)
         self.robots = robots
         try:
             cd = robots.crawl_delay("*") if robots is not None else None

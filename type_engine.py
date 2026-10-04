@@ -242,7 +242,10 @@ def extract_page(t, html, url, expect_item=False):
                 if f.get("special") in ("serial", "checked", "change", "computed"):
                     continue
                 if f.get("special") == "page_url":
-                    link = next((v for k, v in it.items() if re.search(r"\.url$", k)), None)
+                    # prefer the item's own top-level url ("Product.url") over a nested one picked up
+                    # from a sub-object like image/offers ("Product.image.url", "Product.offers.url")
+                    link = next((v for k, v in it.items() if re.fullmatch(r"[^.]+\.url", k)), None) \
+                        or next((v for k, v in it.items() if re.search(r"\.url$", k)), None)
                     row[f["key"]] = urljoin(url, link) if link else None
                     continue
                 if f.get("special") == "site":

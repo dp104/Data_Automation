@@ -17,7 +17,21 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TEMPLATES = os.path.join(HERE, "templates")
+DATA_DIR = os.environ.get("UNISCRAPE_DATA_DIR") or HERE
+TEMPLATES = os.path.join(DATA_DIR, "templates")
+
+
+def seed_standard_format():
+    """Copy the built-in standard-university format into TEMPLATES if it isn't there yet - needed
+    the first time TEMPLATES lives outside the repo (UNISCRAPE_DATA_DIR set, e.g. a Render disk)."""
+    if os.path.abspath(TEMPLATES) == os.path.abspath(os.path.join(HERE, "templates")):
+        return
+    os.makedirs(TEMPLATES, exist_ok=True)
+    for name in ("standard-university.json", "standard-university.xlsx"):
+        dst = os.path.join(TEMPLATES, name)
+        src = os.path.join(HERE, "templates", name)
+        if not os.path.exists(dst) and os.path.exists(src):
+            shutil.copyfile(src, dst)
 
 MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
           "November", "December"]

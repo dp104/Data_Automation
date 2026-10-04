@@ -26,8 +26,11 @@ import extractor
 from extractor import LEVEL_ORDER, MONTHS, extract, fee_only
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CACHE = os.path.join(HERE, "cache")
-CONFIGS = os.path.join(HERE, "configs")
+# Writable data lives under UNISCRAPE_DATA_DIR when set (point it at a mounted persistent disk in
+# production - e.g. Render - since the app's own directory is wiped on every redeploy there).
+DATA_DIR = os.environ.get("UNISCRAPE_DATA_DIR") or HERE
+CACHE = os.path.join(DATA_DIR, "cache")
+CONFIGS = os.path.join(DATA_DIR, "configs")
 
 TLD_COUNTRY = {"uk": "United kingdom", "au": "Australia", "ca": "Canada", "nz": "New Zealand", "ie": "Ireland",
                "de": "Germany", "fr": "France", "nl": "Netherlands", "es": "Spain", "it": "Italy", "se": "Sweden",
@@ -314,8 +317,10 @@ def save_outputs(sheets, review, uni, out_dir, template=None):
 
 
 def main():
-    # `kill -USR1 <pid>` prints every thread's stack (diagnosing a stalled crawl)
-    faulthandler.register(signal.SIGUSR1, all_threads=True)
+    # `kill -USR1 <pid>` prints every thread's stack (diagnosing a stalled crawl). POSIX only - SIGUSR1
+    # doesn't exist on Windows, where this tool is only ever run for local development.
+    if hasattr(signal, "SIGUSR1"):
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
     ap = argparse.ArgumentParser(description="Scan a university website and export courses to the Flyurdream Excel format")
     ap.add_argument("url")
     ap.add_argument("--rescan", action="store_true", help="ignore cached scan results")
