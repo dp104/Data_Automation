@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Browser front-end for the university scraper.  Run:  ./uniscrape-web   then open http://localhost:8765
-Listens on 127.0.0.1 only unless UNISCRAPE_HOST is set (e.g. to 0.0.0.0 for a hosted deployment)."""
+Listens on 127.0.0.1 only for a plain local run; binds 0.0.0.0 automatically whenever PORT is set
+(any PaaS host) or UNISCRAPE_HOST is set explicitly."""
 import html
 import io
 import json
@@ -55,7 +56,12 @@ _load_env_file(os.path.join(HERE, "saas.env"))
 
 # Render (and most PaaS hosts) inject PORT and expect the app to bind 0.0.0.0; local use keeps the
 # old "this computer only" default so a plain ./uniscrape-web run is never exposed on the network.
-HOST = os.environ.get("UNISCRAPE_HOST", "127.0.0.1")
+# Don't rely solely on UNISCRAPE_HOST being set (e.g. via render.yaml's Blueprint) - if the service
+# was instead created as a plain web service pointed at the repo, render.yaml's envVars are never
+# applied and the app would silently bind to localhost, which Render's port scanner can't see and
+# the deploy times out. PORT is injected unconditionally by the platform, so its presence alone is
+# a reliable signal that we're hosted and must bind every interface.
+HOST = os.environ.get("UNISCRAPE_HOST") or ("0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
 PORT = int(os.environ.get("PORT") or os.environ.get("UNISCRAPE_PORT", "8765"))
 # Team mode: the tool sits behind Cloudflare Access or Tailscale, which sign people in with Google
 # Workspace and pass their identity in a header. Without a verified @ALLOWED_DOMAIN identity -> 403.
